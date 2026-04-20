@@ -1,0 +1,112 @@
+@import './theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    font-family: var(--brand-font);
+    font-feature-settings: 'ss01';
+    background-color: var(--brand-bg-light);
+    color: var(--brand-text-light);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  html.dark body {
+    background-color: var(--brand-bg-dark);
+    color: var(--brand-text-dark);
+  }
+  button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  .surface {
+    background-color: var(--brand-surface-light);
+    border-radius: var(--brand-radius);
+    border: 1px solid rgba(15, 23, 42, 0.06);
+  }
+  html.dark .surface {
+    background-color: var(--brand-surface-dark);
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+  .accent {
+    color: var(--brand-primary);
+  }
+  .btn {
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: var(--brand-radius);
+    font-weight: 500;
+    transition: background-color 120ms ease;
+  }
+  .btn-primary {
+    background-color: var(--brand-primary);
+    color: #111827;
+  }
+  .btn-primary:hover {
+    filter: brightness(0.95);
+  }
+  .btn-ghost {
+    background-color: transparent;
+  }
+  .btn-ghost:hover {
+    background-color: rgba(148, 163, 184, 0.12);
+  }
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--brand-radius);
+  }
+  .icon-btn:hover {
+    background-color: rgba(148, 163, 184, 0.12);
+  }
+  .fade-in {
+    animation: fadeIn 150ms ease-in both;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .type-badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 24px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+  .days-badge {
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 24px;
+    background-color: rgba(245, 158, 11, 0.15);
+    color: var(--brand-primary);
+    font-weight: 600;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+  /* User-uploaded brand logos are often dark on transparent. In dark mode,
+     force them white so they don't disappear into the background. The user
+     can still use a colored logo — this is a legibility fallback. */
+  html.dark .brand-logo {
+    filter: brightness(0) invert(1);
+  }
+}

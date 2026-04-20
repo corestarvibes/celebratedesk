@@ -1,0 +1,12 @@
+:root {
+  --brand-primary: #f59e0b;
+  --brand-secondary: #1e40af;
+  --brand-bg-dark: #0f172a;
+  --brand-bg-light: #fafafa;
+  --brand-surface-dark: #1e293b;
+  --brand-surface-light: #ffffff;
+  --brand-text-dark: #f1f5f9;
+  --brand-text-light: #1e293b;
+  --brand-radius: 12px;
+  --brand-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}

@@ -1,0 +1,51 @@
+appId: com.celebratedesk.app
+productName: CelebrateDesk
+directories:
+  output: dist-electron
+  buildResources: build
+files:
+  - out/**/*
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tailwind.config.js,postcss.config.js}'
+asarUnpack:
+  - resources/**
+  - node_modules/better-sqlite3/**
+  - node_modules/puppeteer-core/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
+win:
+  target: nsis
+  executableName: CelebrateDesk
+  icon: build/icon.ico
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  target: dmg
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target: AppImage
+  icon: build/icon.png
+  maintainer: celebratedesk.app
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+# To enable GitHub auto-updates, uncomment and configure:
+# publish:
+#   provider: github
+#   owner: your-github-username
+#   repo: celebratedesk
