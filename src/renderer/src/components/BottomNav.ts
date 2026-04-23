@@ -9,7 +9,9 @@ export function bottomNav(): HTMLElement {
 
   const buttons = VIEW_REGISTRY.map((v) => {
     const btn = document.createElement('button')
-    btn.className = 'icon-btn flex flex-col items-center gap-0.5 text-xs px-3'
+    // Top-border indicator: transparent by default, brand-blue when active.
+    btn.className =
+      'icon-btn flex flex-col items-center gap-0.5 text-xs px-3 relative border-t-[3px] border-transparent'
     btn.dataset.viewId = v.id
     btn.setAttribute('aria-label', v.label)
     btn.innerHTML = `<span class="text-xl leading-none">${v.icon}</span><span>${v.label}</span>`
@@ -27,9 +29,11 @@ export function bottomNav(): HTMLElement {
       if (b.dataset.viewId === active) {
         b.classList.add('text-brand-primary')
         b.style.color = 'var(--brand-primary)'
+        b.style.borderTopColor = 'var(--brand-primary)'
       } else {
         b.classList.remove('text-brand-primary')
         b.style.color = ''
+        b.style.borderTopColor = 'transparent'
       }
     }
   }

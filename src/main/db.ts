@@ -76,6 +76,14 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_attendance_month ON attendance(month);
     `
+  },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE events ADD COLUMN end_date TEXT;
+      ALTER TABLE events ADD COLUMN location TEXT;
+      ALTER TABLE events ADD COLUMN event_url TEXT;
+    `
   }
 ]
 
@@ -124,7 +132,10 @@ function rowToEvent(row: Record<string, unknown>): CelebEvent {
     source: row.source as CelebEvent['source'],
     lastScraped: (row.lastScraped as string | null) ?? undefined,
     createdAt: row.createdAt as string,
-    updatedAt: row.updatedAt as string
+    updatedAt: row.updatedAt as string,
+    end_date: (row.end_date as string | null) ?? undefined,
+    location: (row.location as string | null) ?? undefined,
+    event_url: (row.event_url as string | null) ?? undefined
   }
 }
 
@@ -156,7 +167,7 @@ export function upsertEvent(partial: Partial<CelebEvent>): CelebEvent {
         updatedAt: now
       }
       d.prepare(
-        `UPDATE events SET name=?, type=?, date=?, recurring=?, notes=?, photo_url=?, source=?, lastScraped=?, updatedAt=? WHERE id=?`
+        `UPDATE events SET name=?, type=?, date=?, recurring=?, notes=?, photo_url=?, source=?, lastScraped=?, end_date=?, location=?, event_url=?, updatedAt=? WHERE id=?`
       ).run(
         merged.name,
         merged.type,
@@ -166,6 +177,9 @@ export function upsertEvent(partial: Partial<CelebEvent>): CelebEvent {
         merged.photo_url ?? null,
         merged.source,
         merged.lastScraped ?? null,
+        merged.end_date ?? null,
+        merged.location ?? null,
+        merged.event_url ?? null,
         merged.updatedAt,
         merged.id
       )
@@ -183,11 +197,14 @@ export function upsertEvent(partial: Partial<CelebEvent>): CelebEvent {
     photo_url: partial.photo_url,
     source: partial.source ?? 'manual',
     lastScraped: partial.lastScraped,
+    end_date: partial.end_date,
+    location: partial.location,
+    event_url: partial.event_url,
     createdAt: now,
     updatedAt: now
   }
   d.prepare(
-    `INSERT INTO events (id,name,type,date,recurring,notes,photo_url,source,lastScraped,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO events (id,name,type,date,recurring,notes,photo_url,source,lastScraped,end_date,location,event_url,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     ev.id,
     ev.name,
@@ -198,6 +215,9 @@ export function upsertEvent(partial: Partial<CelebEvent>): CelebEvent {
     ev.photo_url ?? null,
     ev.source,
     ev.lastScraped ?? null,
+    ev.end_date ?? null,
+    ev.location ?? null,
+    ev.event_url ?? null,
     ev.createdAt,
     ev.updatedAt
   )

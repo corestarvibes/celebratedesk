@@ -140,35 +140,58 @@ function registerIpc(): void {
     searchEvents(query).map(toComputed)
   )
   ipcMain.handle('db:exportJSON', (): string => exportAllAsJSON())
-  ipcMain.handle('db:importCSV', (_e, csv: string): ImportResult => {
-    const parsed = parseCsv(csv)
-    if (parsed.rows.length === 0) {
+  ipcMain.handle(
+    'db:importCSV',
+    (
+      _e,
+      csv: string,
+      options?: { fromDate?: string }
+    ): ImportResult => {
+      const parsed = parseCsv(csv)
+      if (parsed.rows.length === 0) {
+        return {
+          inserted: 0,
+          updated: 0,
+          skipped: 0,
+          errors: parsed.errors,
+          detectedHeaders: parsed.detectedHeaders
+        }
+      }
+
+      // Optional rolling-window filter: keep only rows whose NEXT occurrence
+      // is on-or-after the supplied YYYY-MM-DD. Events without a next
+      // occurrence (non-recurring, past) are filtered based on their raw date.
+      let rowsToImport = parsed.rows
+      let skippedByFilter = 0
+      if (options?.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(options.fromDate)) {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const from = options.fromDate
+        rowsToImport = parsed.rows.filter((r) => {
+          const nextOcc = getNextOccurrence(r.date, r.recurring, tz)
+          return nextOcc >= from
+        })
+        skippedByFilter = parsed.rows.length - rowsToImport.length
+      }
+
+      const res = bulkUpsert(
+        rowsToImport.map((r) => ({
+          name: r.name,
+          type: r.type,
+          date: r.date,
+          recurring: r.recurring,
+          notes: r.notes,
+          photo_url: r.photo_url,
+          source: 'csv'
+        }))
+      )
       return {
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
+        ...res,
+        skipped: skippedByFilter,
         errors: parsed.errors,
         detectedHeaders: parsed.detectedHeaders
       }
     }
-    const res = bulkUpsert(
-      parsed.rows.map((r) => ({
-        name: r.name,
-        type: r.type,
-        date: r.date,
-        recurring: r.recurring,
-        notes: r.notes,
-        photo_url: r.photo_url,
-        source: 'csv'
-      }))
-    )
-    return {
-      ...res,
-      skipped: 0,
-      errors: parsed.errors,
-      detectedHeaders: parsed.detectedHeaders
-    }
-  })
+  )
 
   // --- scraper ---
   ipcMain.handle('scraper:runNow', async () => {
@@ -226,6 +249,21 @@ function registerIpc(): void {
     const target = join(dir, `brand${ext}`)
     copyFileSync(sourcePath, target)
     setSetting('logoPath', target)
+    return target
+  })
+
+  // Copy an event photo into <userData>/event-photos/ and return the absolute
+  // path. Used by the EventFormModal picker so users can upload images from
+  // anywhere on disk without worrying about the file being moved later.
+  ipcMain.handle('system:saveEventPhoto', (_e, sourcePath: string): string => {
+    const dir = join(app.getPath('userData'), 'event-photos')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    const ext = extname(sourcePath) || '.jpg'
+    const target = join(
+      dir,
+      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
+    )
+    copyFileSync(sourcePath, target)
     return target
   })
 

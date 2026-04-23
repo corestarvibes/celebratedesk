@@ -12,16 +12,54 @@ import { fileUrl } from '../utils/fileUrl'
 import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
 
-const QA_PER_SLIDE = 3
+const QA_PER_SLIDE = 8 // 2 columns × 4 rows per slide
 
 // Module-level state — survives across re-renders so the main slideshow can
 // advance our slide without remounting us.
 let currentRoot: HTMLElement | null = null
 let currentMember: MotmMember | null = null
 let slideIndex = 0
+// Tracks the last slide index we actually PAINTED so we can fire the star
+// burst exactly once per entry to the hero (slide 0), not on every re-render
+// of slide 0 (e.g. when an unrelated state change causes us to remount).
+let lastPaintedIndex = -1
 
 function qaSlideCount(m: MotmMember): number {
   return Math.ceil((m.qa?.length ?? 0) / QA_PER_SLIDE)
+}
+
+/** Strip any leading "Q:" / "A:" / "Question:" / "Answer:" from stored text.
+ *  Historical imports baked these prefixes into the data; the display adds
+ *  its own "Q —" / "A —" labels, so leaving them in would double up. Done
+ *  at render time so older records auto-clean on view without needing a
+ *  destructive DB migration. The Settings "Clean Q:/A: prefixes" button
+ *  also offers a permanent scrub. */
+const QA_PREFIX_RE = /^\s*(?:q|a|question|answer)\s*[:.)\-–—]\s*/i
+function stripQAPrefix(s: string): string {
+  return (s ?? '').replace(QA_PREFIX_RE, '').trim()
+}
+
+/** Best-effort heuristic: are this member's Q&A pairs swapped?
+ *  Signals: more answers end in "?" than questions, OR questions are on average
+ *  much longer than answers (answers are usually the longer "essay" text). */
+function looksSwapped(m: MotmMember): boolean {
+  const qa = m.qa ?? []
+  if (qa.length < 2) return false
+  let aEndsWithQuestion = 0
+  let qEndsWithQuestion = 0
+  let qTotalLen = 0
+  let aTotalLen = 0
+  for (const p of qa) {
+    const q = (p.question ?? '').trim()
+    const a = (p.answer ?? '').trim()
+    if (q.endsWith('?')) qEndsWithQuestion++
+    if (a.endsWith('?')) aEndsWithQuestion++
+    qTotalLen += q.length
+    aTotalLen += a.length
+  }
+  const moreAnswersAreQuestions = aEndsWithQuestion > qEndsWithQuestion
+  const questionsAreLonger = qTotalLen > aTotalLen * 1.6
+  return moreAnswersAreQuestions || questionsAreLonger
 }
 
 function totalSlideCount(m: MotmMember): number {
@@ -55,7 +93,7 @@ export function memberOfMonthView(_ctx: ViewContext): HTMLElement {
     currentMember = active
     if (memberChanged) {
       slideIndex = 0
-      fireStarBurst()
+      lastPaintedIndex = -1 // force fresh burst on the new member's hero
     }
     renderSlide(root, active, slideIndex)
   })
@@ -71,19 +109,45 @@ export function memberOfMonthView(_ctx: ViewContext): HTMLElement {
  * the next entry to MOTM starts from the hero again.
  */
 export function motmAdvance(): boolean {
-  if (!currentMember || !currentRoot) return false
+  if (!currentMember || !currentRoot) {
+    // eslint-disable-next-line no-console
+    console.log('[motm-view] motmAdvance: no currentMember/root yet — yielding')
+    return false
+  }
   const total = totalSlideCount(currentMember)
+  // eslint-disable-next-line no-console
+  console.log(
+    '[motm-view] motmAdvance — slideIndex=',
+    slideIndex,
+    'total=',
+    total,
+    'qa.length=',
+    currentMember.qa.length
+  )
   if (slideIndex + 1 < total) {
     slideIndex++
     renderSlide(currentRoot, currentMember, slideIndex)
-    // eslint-disable-next-line no-console
-    console.log('[motm-view] advanced internal slide → idx=', slideIndex, '/', total)
     return true
   }
   // eslint-disable-next-line no-console
-  console.log('[motm-view] last slide reached — yielding to next view')
+  console.log('[motm-view] last slide reached — resetting & yielding to next view')
   slideIndex = 0
   return false
+}
+
+/**
+ * Reset internal slide state. Called when the main slideshow (or a manual
+ * navigation) leaves this view. Ensures the next entry starts at slide 0.
+ */
+export function motmReset(): void {
+  if (slideIndex !== 0) {
+    // eslint-disable-next-line no-console
+    console.log('[motm-view] motmReset — slideIndex', slideIndex, '→ 0')
+  }
+  slideIndex = 0
+  // Force the next hero render to fire the star burst (we're leaving, so
+  // the next entry should feel fresh).
+  lastPaintedIndex = -1
 }
 
 function renderEmptyOrPicker(root: HTMLElement, members: MotmMember[]): void {
@@ -167,16 +231,43 @@ function renderSlide(root: HTMLElement, member: MotmMember, idx: number): void {
   )
   if (safeIdx === 0) {
     root.appendChild(renderHero(member))
+    // Fire the star burst when ENTERING the hero from a different slide (or
+    // on first render ever). Skip when re-rendering the hero due to an
+    // unrelated state change (remount while already on slide 0).
+    if (lastPaintedIndex !== 0) {
+      fireStarBurst()
+    }
+    lastPaintedIndex = 0
     return
   }
   const pairIdx = (safeIdx - 1) * QA_PER_SLIDE
   const group = member.qa.slice(pairIdx, pairIdx + QA_PER_SLIDE)
   root.appendChild(renderQAGroup(member, group, safeIdx, qaSlideCount(member)))
+  lastPaintedIndex = safeIdx
 }
 
 function renderHero(member: MotmMember): HTMLElement {
+  // Vertical stack: full-width banner, then the photo below it.
+  const wrap = document.createElement('div')
+  wrap.className = 'flex-1 flex flex-col min-h-0 bg-black'
+
+  // Big banner across the top separated from the image by a subtle hairline.
+  const banner = document.createElement('div')
+  banner.className =
+    'w-full text-center font-black tracking-wide uppercase py-5 px-6 border-b'
+  banner.style.borderBottomColor = 'rgba(56, 189, 248, 0.35)'
+  banner.style.background = 'linear-gradient(180deg, rgba(56,189,248,0.22), rgba(0,0,0,0))'
+  banner.style.fontSize = 'clamp(36px, 5vh, 64px)'
+  // Brand blue, explicit — not reliant on the accentColor override.
+  banner.style.color = '#38bdf8'
+  banner.style.textShadow = '0 2px 8px rgba(0,0,0,0.6)'
+  banner.style.letterSpacing = '0.08em'
+  const monthPart = member.activeMonth ? monthLabel(member.activeMonth).split(' ')[0] : ''
+  banner.textContent = `⭐ ${monthPart ? monthPart + ' ' : ''}Member of the Month ⭐`
+  wrap.appendChild(banner)
+
   const hero = document.createElement('div')
-  hero.className = 'relative flex-1 flex items-center justify-center bg-black overflow-hidden'
+  hero.className = 'relative flex-1 flex items-center justify-center overflow-hidden min-h-0'
   if (member.photo_url) {
     const img = document.createElement('img')
     img.src = fileUrl(member.photo_url)
@@ -185,20 +276,14 @@ function renderHero(member: MotmMember): HTMLElement {
     hero.appendChild(img)
     hero.appendChild(renderNameOverlay(member))
   } else {
-    hero.classList.add('bg-gradient-to-br')
-    hero.style.background =
-      'linear-gradient(135deg, var(--brand-primary), rgba(0,0,0,0.6))'
+    hero.style.background = 'linear-gradient(135deg, var(--brand-primary), rgba(0,0,0,0.6))'
     const letter = document.createElement('div')
     letter.className = 'text-[200px] text-white font-black opacity-60'
     letter.textContent = (member.name[0] ?? '?').toUpperCase()
     hero.appendChild(letter)
   }
-  const badge = document.createElement('div')
-  badge.className =
-    'absolute top-4 right-4 px-3 py-1.5 rounded-brand text-sm font-semibold bg-black/60 text-white backdrop-blur-sm'
-  badge.textContent = `⭐ Member of the Month${member.activeMonth ? ' · ' + monthLabel(member.activeMonth) : ''}`
-  hero.appendChild(badge)
-  return hero
+  wrap.appendChild(hero)
+  return wrap
 }
 
 function monthLabel(ym: string | undefined): string {
@@ -295,110 +380,140 @@ function renderQAGroup(
   wrap.className =
     'relative flex-1 flex flex-col items-center bg-gradient-to-b from-black to-slate-900 text-slate-100 overflow-hidden'
 
+  // Top banner — member name between stars, matching the hero slide style.
+  const banner = document.createElement('div')
+  banner.className =
+    'w-full text-center font-black tracking-wide uppercase py-4 px-6 border-b flex-shrink-0'
+  banner.style.borderBottomColor = 'rgba(56, 189, 248, 0.35)'
+  banner.style.background = 'linear-gradient(180deg, rgba(56,189,248,0.22), rgba(0,0,0,0))'
+  banner.style.fontSize = 'clamp(28px, 4vh, 52px)'
+  banner.style.color = '#38bdf8'
+  banner.style.textShadow = '0 2px 8px rgba(0,0,0,0.6)'
+  banner.style.letterSpacing = '0.08em'
+  banner.textContent = `⭐ ${member.name.toUpperCase()} ⭐`
+  wrap.appendChild(banner)
+
+  // Q&A counter — smaller now that the name is the prominent header.
   const header = document.createElement('div')
   header.className =
-    'text-xs text-slate-400 font-bold uppercase tracking-[0.25em] mt-6'
+    'text-[14px] text-slate-400 font-bold uppercase tracking-[0.25em] mt-4'
   header.textContent = `Q&A ${slideIdx} of ${totalQaSlides}`
   wrap.appendChild(header)
 
+  if (looksSwapped(member)) {
+    const fix = document.createElement('button')
+    fix.className =
+      'absolute top-6 right-6 px-4 py-2 rounded-brand bg-rose-500/30 border border-rose-400 text-rose-100 text-[15px] font-bold cursor-pointer'
+    fix.textContent = '↕ Q/A look reversed — tap to fix'
+    fix.addEventListener('click', async () => {
+      const swapped = {
+        ...member,
+        qa: member.qa.map((p) => ({ question: p.answer, answer: p.question }))
+      }
+      await window.celebAPI.motm.upsert(swapped)
+      // Force reload of the active member so the view re-renders with fixed data.
+      currentMember = null
+      slideIndex = 0
+      lastPaintedIndex = -1
+      if (currentRoot) {
+        const refreshed = memberOfMonthView({ events: [], searchQuery: '', timezone: '' })
+        currentRoot.replaceChildren(refreshed)
+      }
+    })
+    wrap.appendChild(fix)
+  }
+
   const scroller = document.createElement('div')
-  scroller.className = 'flex-1 w-full max-w-3xl overflow-y-auto min-h-0 scrollbar-none'
+  // No explicit max width — use the full viewport for Q&A so each column gets
+  // maximum reading room on a big TV.
+  scroller.className = 'flex-1 w-full overflow-y-auto min-h-0 scrollbar-none'
   scroller.style.scrollbarWidth = 'none'
 
   const content = document.createElement('div')
-  // Per spec: padding 32px sides, 24px top/bottom
-  content.className = 'flex flex-col gap-6'
-  content.style.padding = '24px 32px'
+  // Two-column grid. Up to 8 pairs per slide → 4 per column. Large type sizes
+  // below may cause the slide to overflow on smaller viewports; the one-way
+  // auto-scroller kicks in to cycle through.
+  content.className = 'grid gap-x-16 gap-y-10'
+  content.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
+  content.style.padding = '32px 64px'
+  content.style.width = '100%'
 
-  pairs.forEach((pair, i) => {
+  pairs.forEach((pair) => {
     const block = document.createElement('div')
-    block.className = 'flex flex-col'
+    block.className = 'flex flex-col min-w-0'
 
+    // DO NOT SWAP — question first, answer second.
+    // The data contract is: pair.question = the question, pair.answer = the
+    // answer. If you see Q/A reversed in the app, the DATA is wrong. Use the
+    // red "tap to fix" button that appears automatically when the parser
+    // detects this, or the Swap Q↔A buttons in Settings.
+    // Both Q — and A — labels use the brand blue. Hardcoded so a custom
+    // accentColor in settings can't re-tint them to an off-brand color.
+    // Sized for 50–55" TV legibility. Will likely overflow a single slide
+    // when there are 4 pairs per column — the one-way auto-scroll handles it.
     const qLabel = document.createElement('div')
-    qLabel.className = 'text-amber-400 font-bold uppercase tracking-[0.25em] mb-1'
-    qLabel.style.fontSize = '13px'
+    qLabel.className = 'font-bold uppercase tracking-[0.3em] mb-2'
+    qLabel.style.color = '#38bdf8'
+    qLabel.style.fontSize = '20px'
     qLabel.textContent = 'Q —'
     block.appendChild(qLabel)
 
     const question = document.createElement('div')
-    question.className = 'text-white font-semibold mb-4'
-    question.style.fontSize = '18px'
-    question.style.lineHeight = '1.4'
-    question.textContent = pair.question
+    question.className = 'text-white font-bold mb-4'
+    question.style.fontSize = '34px'
+    question.style.lineHeight = '1.2'
+    question.textContent = stripQAPrefix(pair.question)
     block.appendChild(question)
 
     const aLabel = document.createElement('div')
-    aLabel.className = 'text-slate-400 font-bold uppercase tracking-[0.25em] mb-1'
-    aLabel.style.fontSize = '13px'
+    aLabel.className = 'font-bold uppercase tracking-[0.3em] mb-2'
+    aLabel.style.color = '#38bdf8'
+    aLabel.style.fontSize = '17px'
     aLabel.textContent = 'A —'
     block.appendChild(aLabel)
 
     const answer = document.createElement('div')
     answer.className = 'text-slate-100'
-    answer.style.fontSize = '16px'
-    answer.style.lineHeight = '1.7'
-    answer.textContent = pair.answer
+    answer.style.fontSize = '26px'
+    answer.style.lineHeight = '1.45'
+    answer.textContent = stripQAPrefix(pair.answer)
     block.appendChild(answer)
 
     content.appendChild(block)
-
-    if (i < pairs.length - 1) {
-      const divider = document.createElement('hr')
-      divider.className = 'border-slate-700'
-      content.appendChild(divider)
-    }
   })
 
   scroller.appendChild(content)
   wrap.appendChild(scroller)
   startAutoScroll(scroller)
 
-  // Fixed member watermark (doesn't scroll)
-  const watermark = document.createElement('div')
-  watermark.className =
-    'absolute bottom-3 right-4 flex items-center gap-2 text-xs text-slate-300 bg-black/40 px-2 py-1 rounded-brand'
-  if (member.photo_url) {
-    const img = document.createElement('img')
-    img.src = fileUrl(member.photo_url)
-    img.className = 'w-6 h-6 rounded-full object-cover'
-    watermark.appendChild(img)
-  }
-  const first = member.name.split(/\s+/)[0] ?? member.name
-  const name = document.createElement('span')
-  name.className = 'font-semibold'
-  name.textContent = first
-  watermark.appendChild(name)
-  wrap.appendChild(watermark)
+  // (Bottom watermark removed — member name is now in the top banner.)
 
   return wrap
 }
 
-/** Slow auto-scroll for overflowing Q&A content. ~20 px/s, 1.5s pauses. */
+/** One-way auto-scroll for overflowing Q&A content. Scrolls from top to
+ *  bottom then parks there until the main slideshow advances to the next
+ *  slide. No bounce-back — the next slide will replace the DOM and start
+ *  scrolling again from the top. */
 function startAutoScroll(container: HTMLElement): void {
   requestAnimationFrame(() => {
     const overflow = container.scrollHeight - container.clientHeight
     if (overflow <= 4) return
     let offset = 0
-    let dir = 1
-    let holdUntil = performance.now() + 1500
+    let holdUntil = performance.now() + 1500 // pause 1.5s at top
     const PX_PER_FRAME = 0.35 // ~21 px/s at 60 fps
-    const HOLD_MS = 1500
     const step = (now: number): void => {
       if (!container.isConnected) return
       if (now < holdUntil) {
         requestAnimationFrame(step)
         return
       }
-      offset += PX_PER_FRAME * dir
       if (offset >= overflow) {
-        offset = overflow
-        dir = -1
-        holdUntil = now + HOLD_MS
-      } else if (offset <= 0) {
-        offset = 0
-        dir = 1
-        holdUntil = now + HOLD_MS
+        // Park at bottom. Don't touch scrollTop again; main slideshow will
+        // advance this slide out after its interval.
+        return
       }
+      offset = Math.min(overflow, offset + PX_PER_FRAME)
       container.scrollTop = offset
       requestAnimationFrame(step)
     }

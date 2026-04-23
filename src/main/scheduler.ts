@@ -17,8 +17,14 @@ export function startSchedulers(getMainWindow: () => BrowserWindow | null): void
   stopSchedulers()
 
   const hours = Math.max(1, getSetting('scrapeIntervalHours') || 24)
-  // e.g. every N hours at minute 7 to avoid clock-aligned spikes
+  // Only run the scheduled scrape when the user has explicitly chosen
+  // the scraper as their data source. CSV / manual users shouldn't hit
+  // ChalkItPro every 24h in the background.
   scrapeTask = cron.schedule(`7 */${hours} * * *`, async () => {
+    if (getSetting('dataSource') !== 'scrape') {
+      logger.info('[scheduler] scheduled scrape skipped (dataSource != "scrape")')
+      return
+    }
     try {
       const res = await runScrape()
       const win = getMainWindow()

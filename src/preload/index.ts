@@ -1,7 +1,7 @@
 // ADD NEW IPC CHANNEL HERE — keep names in sync with src/main/index.ts.
 // All renderer ↔ main traffic flows through window.celebAPI.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type {
   AppSettings,
   AttendanceRow,
@@ -34,7 +34,10 @@ const celebAPI = {
     search: (query: string): Promise<CelebEventComputed[]> =>
       ipcRenderer.invoke('db:search', query),
     exportJSON: (): Promise<string> => ipcRenderer.invoke('db:exportJSON'),
-    importCSV: (csv: string): Promise<ImportResult> => ipcRenderer.invoke('db:importCSV', csv)
+    importCSV: (
+      csv: string,
+      options?: { fromDate?: string }
+    ): Promise<ImportResult> => ipcRenderer.invoke('db:importCSV', csv, options)
   },
   scraper: {
     runNow: (): Promise<ScrapeResult> => ipcRenderer.invoke('scraper:runNow'),
@@ -65,8 +68,20 @@ const celebAPI = {
     getVersion: (): Promise<string> => ipcRenderer.invoke('system:getVersion'),
     saveLogo: (sourcePath: string): Promise<string> =>
       ipcRenderer.invoke('system:saveLogo', sourcePath),
+    saveEventPhoto: (sourcePath: string): Promise<string> =>
+      ipcRenderer.invoke('system:saveEventPhoto', sourcePath),
     pathBasename: (p: string): Promise<string> => ipcRenderer.invoke('system:pathBasename', p),
-    readTextFile: (p: string): Promise<string> => ipcRenderer.invoke('system:readTextFile', p)
+    readTextFile: (p: string): Promise<string> => ipcRenderer.invoke('system:readTextFile', p),
+    /** Resolve a dropped File's absolute OS path. Electron 32+ deprecated
+     *  File.path; 39+ removed it. webUtils.getPathForFile() is the
+     *  supported replacement and must run in the preload context. */
+    getPathForFile: (file: File): string => {
+      try {
+        return webUtils.getPathForFile(file)
+      } catch {
+        return ''
+      }
+    }
   },
   motm: {
     getAll: (): Promise<MotmMember[]> => ipcRenderer.invoke('motm:getAll'),

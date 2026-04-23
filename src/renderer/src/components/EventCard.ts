@@ -44,21 +44,21 @@ export function typeGlyph(type: CelebEventComputed['type']): string {
 export function eventCardTight(ev: CelebEventComputed): HTMLElement {
   const card = document.createElement('div')
   card.className =
-    'surface p-2 flex flex-col gap-1 cursor-pointer hover:brightness-95 overflow-hidden min-w-0'
+    'surface p-3 flex flex-col gap-2 cursor-pointer hover:brightness-95 overflow-hidden min-w-0'
   card.addEventListener('click', () => openEventForm(ev))
 
   const row = document.createElement('div')
-  row.className = 'flex items-start gap-2 min-w-0'
+  row.className = 'flex items-start gap-3 min-w-0'
 
   const avatar = document.createElement('div')
   avatar.className =
-    'flex-shrink-0 rounded-brand w-8 h-8 flex items-center justify-center text-white font-semibold text-xs'
+    'flex-shrink-0 rounded-brand w-10 h-10 flex items-center justify-center text-white font-semibold text-sm'
   if (ev.photo_url) {
     avatar.style.background = 'transparent'
     const img = document.createElement('img')
     img.src = ev.photo_url
     img.alt = ev.name
-    img.className = 'w-8 h-8 rounded-brand object-cover'
+    img.className = 'w-10 h-10 rounded-brand object-cover'
     avatar.appendChild(img)
   } else {
     avatar.style.backgroundColor = hslForName(ev.name)
@@ -69,18 +69,19 @@ export function eventCardTight(ev: CelebEventComputed): HTMLElement {
   body.className = 'flex-1 min-w-0 overflow-hidden'
 
   const name = document.createElement('div')
-  name.className = 'font-semibold text-[13px] leading-snug break-words'
+  // Bigger name for TV legibility. Still wraps (break-words) so no truncation.
+  name.className = 'font-bold text-[26px] leading-tight break-words'
   name.textContent = `${typeGlyph(ev.type)} ${ev.name}`
   body.appendChild(name)
 
   if (ev.type === 'birthday' && typeof ev.age === 'number') {
     const sub = document.createElement('div')
-    sub.className = 'text-[11px] opacity-60'
+    sub.className = 'text-[16px] opacity-70 mt-1'
     sub.textContent = `turning ${ev.age + 1}`
     body.appendChild(sub)
   } else if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number') {
     const sub = document.createElement('div')
-    sub.className = 'text-[11px] opacity-60'
+    sub.className = 'text-[16px] opacity-70 mt-1'
     sub.textContent = `${ev.yearsCount + 1} years`
     body.appendChild(sub)
   }
@@ -91,7 +92,7 @@ export function eventCardTight(ev: CelebEventComputed): HTMLElement {
 
   if (ev.daysUntil === 0) {
     const badge = document.createElement('div')
-    badge.className = 'days-badge self-start text-[11px]'
+    badge.className = 'days-badge self-start text-[14px] px-3 py-0.5'
     badge.textContent = 'Today'
     card.appendChild(badge)
   }
@@ -105,20 +106,20 @@ export function eventCard(
   opts: { compact?: boolean; clickable?: boolean } = {}
 ): HTMLElement {
   const card = document.createElement('div')
-  card.className = `surface p-4 flex gap-4 items-center ${opts.clickable === false ? '' : 'cursor-pointer hover:brightness-95'}`
+  card.className = `surface p-5 flex gap-5 items-center ${opts.clickable === false ? '' : 'cursor-pointer hover:brightness-95'}`
   if (opts.clickable !== false) {
     card.addEventListener('click', () => openEventForm(ev))
   }
 
   const avatar = document.createElement('div')
   avatar.className =
-    'flex-shrink-0 rounded-brand w-12 h-12 flex items-center justify-center text-white font-semibold text-lg'
+    'flex-shrink-0 rounded-brand w-16 h-16 flex items-center justify-center text-white font-bold text-2xl'
   if (ev.photo_url) {
     avatar.style.background = 'transparent'
     const img = document.createElement('img')
     img.src = ev.photo_url
     img.alt = ev.name
-    img.className = 'w-12 h-12 rounded-brand object-cover'
+    img.className = 'w-16 h-16 rounded-brand object-cover'
     avatar.appendChild(img)
   } else {
     avatar.style.backgroundColor = hslForName(ev.name)
@@ -126,21 +127,24 @@ export function eventCard(
   }
 
   const body = document.createElement('div')
-  body.className = 'flex-1 min-w-0'
+  body.className = 'flex-1 min-w-0 overflow-hidden'
 
   const row1 = document.createElement('div')
-  row1.className = 'flex items-center gap-2'
+  row1.className = 'flex items-center flex-wrap gap-x-3 gap-y-1'
   const name = document.createElement('div')
-  name.className = 'font-semibold text-base truncate'
+  // Allow wrapping instead of truncating — "Michelle" shouldn't become "Mi…".
+  name.className = 'font-bold text-[28px] leading-tight break-words'
   name.textContent = ev.name
   const badge = document.createElement('span')
-  badge.className = 'type-badge'
+  badge.className = 'type-badge flex-shrink-0'
+  badge.style.fontSize = '15px'
+  badge.style.padding = '3px 12px'
   badge.textContent = `${typeGlyph(ev.type)} ${ev.type}`
   row1.appendChild(name)
   row1.appendChild(badge)
 
   const row2 = document.createElement('div')
-  row2.className = 'text-sm opacity-70 mt-1'
+  row2.className = 'text-[18px] opacity-70 mt-1'
   let subtitle = formatDisplayDate(ev.nextOccurrence, timezone)
   if (ev.type === 'birthday' && typeof ev.age === 'number') subtitle += ` · turning ${ev.age + 1}`
   if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number')
@@ -151,13 +155,15 @@ export function eventCard(
   body.appendChild(row2)
   if (!opts.compact && ev.notes) {
     const notes = document.createElement('div')
-    notes.className = 'text-sm opacity-60 mt-1 truncate'
+    notes.className = 'text-[16px] opacity-60 mt-1 truncate'
     notes.textContent = ev.notes
     body.appendChild(notes)
   }
 
   const days = document.createElement('div')
   days.className = 'days-badge flex-shrink-0'
+  days.style.fontSize = '15px'
+  days.style.padding = '4px 14px'
   days.textContent = daysLabel(ev.daysUntil)
 
   card.appendChild(avatar)

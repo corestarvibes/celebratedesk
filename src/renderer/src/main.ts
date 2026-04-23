@@ -3,7 +3,8 @@ import { applyTheme, topBar } from './components/TopBar'
 import { bottomNav } from './components/BottomNav'
 import { bootstrap, getState, refreshEvents, setState, subscribe } from './state'
 import { VIEW_REGISTRY, getViewById } from './views/viewRegistry'
-import { motmAdvance } from './views/MemberOfMonthView'
+import { motmAdvance, motmReset } from './views/MemberOfMonthView'
+import { eventsAdvance, eventsReset } from './views/EventsView'
 import { toast } from './components/Toast'
 import { openSettings } from './modals/SettingsModal'
 import { openEventForm } from './modals/EventFormModal'
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   renderView(viewHost)
 
   subscribe(() => renderView(viewHost))
+  wireViewTransitionResets()
   wireKeyboard()
   wireSlideshow()
   wirePushEvents()
@@ -34,6 +36,21 @@ async function main(): Promise<void> {
   // React to system theme changes when in auto
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if ((getState().settings?.theme ?? 'auto') === 'auto') applyTheme()
+  })
+}
+
+/** Call any view-specific reset() hook whenever the active view changes.
+ *  Ensures views with internal slide state start fresh next time they mount. */
+function wireViewTransitionResets(): void {
+  let prev = getState().activeView
+  subscribe(() => {
+    const next = getState().activeView
+    if (next === prev) return
+    // eslint-disable-next-line no-console
+    console.log('[nav] transition', prev, '→', next)
+    if (prev === 'motm') motmReset()
+    if (prev === 'events') eventsReset()
+    prev = next
   })
 }
 
@@ -112,8 +129,16 @@ function wireSlideshow(): void {
     const s = getState()
     if (!s.slideshowActive) return
 
+    const knownIds = new Set(VIEW_REGISTRY.map((v) => v.id))
+    const raw = s.settings?.slideshowViews ?? VIEW_REGISTRY.map((v) => v.id)
+    const views = raw.filter((id) => knownIds.has(id))
+    // eslint-disable-next-line no-console
+    console.log('[slideshow] step — current=', s.activeView, ' full cycle views=', views)
+    if (views.length === 0) return
+
     // Give the current view a chance to advance its own internal slide before
-    // moving on. Today only MOTM uses this hook; other views just fall through.
+    // moving on. Views that opt into internal cycling export an xxxAdvance()
+    // that returns true while there's more to show, false when done.
     if (s.activeView === 'motm') {
       const advanced = motmAdvance()
       if (advanced) {
@@ -122,15 +147,23 @@ function wireSlideshow(): void {
         return
       }
     }
+    if (s.activeView === 'events') {
+      const advanced = eventsAdvance()
+      if (advanced) {
+        // eslint-disable-next-line no-console
+        console.log('[slideshow] EVENTS advanced internally — staying on events')
+        return
+      }
+    }
 
-    const knownIds = new Set(VIEW_REGISTRY.map((v) => v.id))
-    const raw = s.settings?.slideshowViews ?? VIEW_REGISTRY.map((v) => v.id)
-    const views = raw.filter((id) => knownIds.has(id))
-    if (views.length === 0) return
     const idx = views.indexOf(s.activeView)
     const next = views[(idx + 1) % views.length]!
     // eslint-disable-next-line no-console
-    console.log('[slideshow] advancing to:', next, ' | views=', views)
+    console.log('[slideshow] advancing to:', next)
+    // Reset internal state of the view we're leaving so it starts fresh
+    // the next time the slideshow reaches it.
+    if (s.activeView === 'motm') motmReset()
+    if (s.activeView === 'events') eventsReset()
     setState({ activeView: next })
   }
   const armOrDisarm = (): void => {

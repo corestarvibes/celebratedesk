@@ -49,12 +49,12 @@ const defaults: AppSettings = {
   notifyDaysAhead: 7,
   activeView: 'today',
   slideshowActive: false,
-  // ADD NEW SETTING HERE — slideshow order includes the 3 new views.
+  // Slideshow rotation order. Matches the bottom-nav order from VIEW_REGISTRY.
   slideshowViews: [
     'today',
     'motm',
+    'events',
     'attendance',
-    'upcoming',
     'weekly',
     'monthly',
     'qrcodes'
@@ -62,7 +62,7 @@ const defaults: AppSettings = {
   lastCsvPath: null,
   brandName: 'CelebrateDesk',
   logoPath: null,
-  accentColor: '#f59e0b',
+  accentColor: '#38bdf8',
   // ADD NEW SETTING HERE — remembered attendance month (defaults to current).
   attendanceViewMonth: null,
   // ADD NEW SETTING HERE — editable QR codes displayed in QRCodesView.
@@ -71,14 +71,20 @@ const defaults: AppSettings = {
     loginUrl: 'https://app.chalkitpro.com/login',
     membersUrl: 'https://app.chalkitpro.com/members',
     scrapeIntervalHours: 24,
+    // Each selector accepts a CSS selector LIST (comma-separated). Puppeteer
+    // resolves to the first element that matches, so we can hedge against
+    // ChalkItPro's React-generated IDs changing.
     selectors: {
-      usernameField: '#email',
-      passwordField: '#password',
-      submitButton: 'button[type="submit"]',
-      memberRow: '.member-row',
-      memberName: '.member-name',
-      memberBirthday: '[data-birthday]',
-      memberAnniversary: '[data-anniversary]'
+      usernameField:
+        'input[type="email"], input[name="email"], input[autocomplete="username"], input[name="username"], #email',
+      passwordField:
+        'input[type="password"], input[name="password"], input[autocomplete="current-password"], #password',
+      submitButton:
+        'button[type="submit"], input[type="submit"], button[aria-label*="sign in" i]',
+      memberRow: '.member-row, [data-member-row], tr.member, li.member',
+      memberName: '.member-name, [data-member-name], .name',
+      memberBirthday: '[data-birthday], .birthday, .dob',
+      memberAnniversary: '[data-anniversary], .anniversary, .member-since'
     }
   }
 }
@@ -104,27 +110,98 @@ export function getAllSettings(): AppSettings {
   return (store as any).store as AppSettings
 }
 
+/** View IDs that used to exist but have been removed. If the stored
+ *  slideshowViews contains any of these, we treat the stored array as
+ *  stale and reset to the current defaults. */
+const REMOVED_VIEW_IDS = ['gallery', 'upcoming']
+
 /**
  * Migrate stored settings at launch:
- * - Ensure slideshowViews contains every view id that ships by default.
- *   (Users that ran an older build have a shorter array; new views added in
- *   later releases would otherwise never appear in the rotation.)
- * - Ensure every default QR code entry exists (by id) so first-launch users
- *   of an upgrade get any new entries we shipped.
+ * - slideshowViews:
+ *   - If it contains a REMOVED view id, reset entirely to the current
+ *     defaults (stale upgrade path).
+ *   - Otherwise just union in any missing defaults.
+ * - qrCodes: preserve customizations, add any missing default ids.
  */
 export function migrateSettings(): void {
   const current = getAllSettings()
-
-  // Union slideshowViews with the current defaults, preserving the user's order.
   const wantedViews = defaults.slideshowViews
   const userViews = Array.isArray(current.slideshowViews) ? current.slideshowViews : []
-  const missing = wantedViews.filter((v) => !userViews.includes(v))
-  if (missing.length > 0) {
-    const merged = [...userViews, ...missing]
+
+  const hasRemoved = userViews.some((id) => REMOVED_VIEW_IDS.includes(id))
+  if (hasRemoved) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(store as any).set('slideshowViews', merged)
+    ;(store as any).set('slideshowViews', [...wantedViews])
     // eslint-disable-next-line no-console
-    console.log('[migrate] slideshowViews: added missing ids:', missing)
+    console.log('[migrate] slideshowViews: stale — reset to defaults', wantedViews)
+  } else {
+    const missing = wantedViews.filter((v) => !userViews.includes(v))
+    if (missing.length > 0) {
+      const merged = [...userViews, ...missing]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).set('slideshowViews', merged)
+      // eslint-disable-next-line no-console
+      console.log('[migrate] slideshowViews: added missing ids:', missing)
+    }
+  }
+
+  // Accent color — if the stored value matches the PREVIOUS default (amber
+  // #f59e0b), reset to the current default. Otherwise the user has set a
+  // custom color and we leave it alone.
+  const LEGACY_AMBER = '#f59e0b'
+  if (
+    typeof current.accentColor === 'string' &&
+    current.accentColor.toLowerCase() === LEGACY_AMBER
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(store as any).set('accentColor', defaults.accentColor)
+    // eslint-disable-next-line no-console
+    console.log(
+      '[migrate] accentColor: stale (amber) — reset to brand default',
+      defaults.accentColor
+    )
+  }
+
+  // Scraper selectors — the original defaults (#email, #password, .member-row)
+  // were a bad guess for ChalkItPro's React app. Replace any stored value that
+  // still matches the old defaults with the current (multi-selector) defaults.
+  // Users who customized their selectors keep their overrides.
+  const LEGACY_SCRAPER_DEFAULTS: Record<string, string> = {
+    usernameField: '#email',
+    passwordField: '#password',
+    submitButton: 'button[type="submit"]',
+    memberRow: '.member-row',
+    memberName: '.member-name',
+    memberBirthday: '[data-birthday]',
+    memberAnniversary: '[data-anniversary]'
+  }
+  const curCfg = current.scraperConfig
+  if (curCfg && curCfg.selectors) {
+    const updated = { ...curCfg.selectors }
+    let changed = false
+    for (const [key, legacy] of Object.entries(LEGACY_SCRAPER_DEFAULTS)) {
+      const k = key as keyof typeof updated
+      if (updated[k] === legacy) {
+        updated[k] =
+          (defaults.scraperConfig.selectors as unknown as Record<string, string>)[key] ??
+          updated[k]
+        changed = true
+      }
+    }
+    if (changed) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).set('scraperConfig', { ...curCfg, selectors: updated })
+      // eslint-disable-next-line no-console
+      console.log('[migrate] scraperConfig.selectors: replaced legacy defaults')
+    }
+    // Always log the current selectors so we can see them even when no
+    // migration runs — makes diagnosing selector issues one-pass.
+    const after = (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (store as any).get('scraperConfig') as typeof curCfg
+    ).selectors
+    // eslint-disable-next-line no-console
+    console.log('[scraper] current selectors on startup:', after)
   }
 
   // QR codes — preserve the user's customizations but add any missing default ids.

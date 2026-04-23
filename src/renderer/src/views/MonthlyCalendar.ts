@@ -32,7 +32,7 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
   const header = document.createElement('div')
   header.className = 'flex items-center justify-between'
   const title = document.createElement('h2')
-  title.className = 'text-[24px] font-semibold'
+  title.className = 'text-[40px] font-bold'
   title.textContent = formatInTimeZone(monthCursor, timezone, 'MMMM yyyy')
 
   const nav = document.createElement('div')
@@ -67,7 +67,7 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
   root.appendChild(header)
 
   const dowRow = document.createElement('div')
-  dowRow.className = 'grid grid-cols-7 gap-2 text-xs opacity-60 text-center'
+  dowRow.className = 'grid grid-cols-7 gap-2 text-[15px] font-semibold opacity-70 text-center'
   for (const l of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
     const d = document.createElement('div')
     d.textContent = l
@@ -83,17 +83,17 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
   for (const key of days) {
     const cell = document.createElement('button')
     cell.className =
-      'surface p-1.5 min-h-[92px] text-left relative flex flex-col gap-1 overflow-hidden'
+      'surface p-2 min-h-[120px] text-left relative flex flex-col gap-1.5 overflow-hidden'
     const isCurrentMonth = key.startsWith(monthStr)
     if (!isCurrentMonth) cell.style.opacity = '0.35'
     if (key === todayKey) {
-      cell.style.outline = '2px solid var(--brand-primary)'
-      cell.style.outlineOffset = '-2px'
+      cell.style.outline = '3px solid var(--brand-primary)'
+      cell.style.outlineOffset = '-3px'
     }
 
     const dayNum = document.createElement('div')
     const dayOnly = parseISO(key).getDate()
-    dayNum.className = 'font-semibold text-sm leading-none px-1 pt-0.5'
+    dayNum.className = 'font-bold text-[22px] leading-none px-1 pt-0.5'
     dayNum.textContent = String(dayOnly)
     cell.appendChild(dayNum)
 
@@ -105,9 +105,9 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
       for (const ev of shown) {
         const pill = document.createElement('div')
         pill.className =
-          'text-[11px] leading-tight px-1.5 py-0.5 rounded-full truncate min-w-0 font-semibold'
-        // Solid amber bg + white text — works in both light and dark mode.
-        pill.style.backgroundColor = 'rgb(245, 158, 11)'
+          'text-[15px] leading-tight px-2 py-1 rounded-full truncate min-w-0 font-semibold'
+        // Solid brand-blue bg + white text — works in both light and dark mode.
+        pill.style.backgroundColor = '#38bdf8'
         pill.style.color = '#ffffff'
         pill.textContent = `${typeGlyph(ev.type)} ${ev.name}`
         pill.title = `${ev.name} — ${ev.type}`
@@ -115,9 +115,8 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
       }
       if (dayEvents.length > MAX_PILLS) {
         const more = document.createElement('div')
-        // Readable "+N more" in both modes via slate-600 (light) / slate-400 (dark).
         more.className =
-          'text-[11px] leading-tight px-1.5 font-medium text-slate-600 dark:text-slate-400'
+          'text-[14px] leading-tight px-2 font-semibold text-slate-600 dark:text-slate-400'
         more.textContent = `+${dayEvents.length - MAX_PILLS} more`
         pills.appendChild(more)
       }

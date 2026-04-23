@@ -11,6 +11,13 @@ import type { MotmQA, ParsedDocxResult } from '@shared/types'
 const Q_PREFIX = /^\s*(?:q|question)\s*[:.)\-]\s*/i
 const A_PREFIX = /^\s*(?:a|answer)\s*[:.)\-]\s*/i
 
+/** Strip any leading Q:/A:/Question:/Answer: prefix from a chunk of text so
+ *  the stored value is purely the content. The display layer adds its own
+ *  Q — / A — labels, so keeping prefixes in the data would double them up. */
+function stripQAPrefixes(s: string): string {
+  return s.replace(Q_PREFIX, '').replace(A_PREFIX, '').trim()
+}
+
 function tryBoldHtml(html: string): MotmQA[] | null {
   // Parse a tolerant subset: <strong>, <b>. Use a simple regex scanner.
   // Walks the HTML for "<strong>...</strong>" or "<b>...</b>" runs; everything
@@ -29,8 +36,11 @@ function tryBoldHtml(html: string): MotmQA[] | null {
     const q = matches[i]!
     const nextStart = i + 1 < matches.length ? matches[i + 1]!.index : html.length
     const between = html.slice(q.end, nextStart)
-    const answer = between.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    if (answer) pairs.push({ question: q.text, answer })
+    const answer = stripQAPrefixes(
+      between.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+    )
+    const question = stripQAPrefixes(q.text)
+    if (question && answer) pairs.push({ question, answer })
   }
   return pairs.length >= 2 ? pairs : null
 }
@@ -62,14 +72,15 @@ function tryPrefixedLines(lines: string[]): MotmQA[] | null {
     }
   }
   flush()
-  return pairs.length >= 2 ? pairs : null
+  // Any pair count is fine — prefix-based matches are high-confidence.
+  return pairs.length >= 1 ? pairs : null
 }
 
 function tryAlternating(lines: string[]): MotmQA[] | null {
   const pairs: MotmQA[] = []
   for (let i = 0; i + 1 < lines.length; i += 2) {
-    const q = lines[i]!.trim()
-    const a = lines[i + 1]!.trim()
+    const q = stripQAPrefixes(lines[i]!)
+    const a = stripQAPrefixes(lines[i + 1]!)
     if (q && a) pairs.push({ question: q, answer: a })
   }
   return pairs.length >= 2 ? pairs : null
@@ -83,13 +94,22 @@ export async function parseDocx(filePath: string): Promise<ParsedDocxResult> {
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
 
-  const boldPairs = tryBoldHtml(html)
-  if (boldPairs) {
-    return { pairs: boldPairs, rawText, confidence: 'high' }
-  }
+  // Heuristics in order of RELIABILITY, not order of speed:
+  //
+  // 1. Q:/A: (and Question:/Answer:) prefixes are unambiguous — if the doc
+  //    uses them, trust them. Docs where ONLY answers are bold (very common)
+  //    would otherwise be parsed backwards by the bold heuristic.
+  // 2. Bold runs assume `bold = question`. Works for docs that pair a bold
+  //    header with a plain paragraph below, but gets it wrong when the
+  //    emphasis is on the answer.
+  // 3. Alternating lines as a last resort.
   const prefixedPairs = tryPrefixedLines(lines)
   if (prefixedPairs) {
     return { pairs: prefixedPairs, rawText, confidence: 'high' }
+  }
+  const boldPairs = tryBoldHtml(html)
+  if (boldPairs) {
+    return { pairs: boldPairs, rawText, confidence: 'medium' }
   }
   const altPairs = tryAlternating(lines)
   if (altPairs) {

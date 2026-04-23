@@ -14,11 +14,13 @@ interface Particle {
   color: string
   size: number
   alpha: number
-  kind: 'square' | 'star'
+  kind: 'square' | 'star' | 'circle'
 }
 
-const COLORS = ['#f59e0b', '#fde68a', '#fb923c', '#fef3c7', '#fb7185', '#22c55e', '#3b82f6']
-const STAR_COLORS = ['#FFD700', '#FFF8DC', '#f59e0b', '#ffffff', '#FFA500']
+// Birthday / celebration palette — multicolor with brand blue woven in.
+const COLORS = ['#38bdf8', '#0ea5e9', '#7dd3fc', '#ffffff', '#fb7185', '#22c55e', '#a78bfa']
+// MOTM star burst — blue + white, tied tightly to the brand.
+const STAR_COLORS = ['#38bdf8', '#ffffff', '#0ea5e9', '#7dd3fc', '#bae6fd']
 
 // Throttle: skip if the last burst fired < 60 seconds ago. Prevents spam if
 // the Today view re-renders frequently (keyboard nav, data refresh, etc.).
@@ -27,12 +29,15 @@ const STAR_COLORS = ['#FFD700', '#FFF8DC', '#f59e0b', '#ffffff', '#FFA500']
 // const BURST_THROTTLE_MS = 60_000
 let lastBurstAt = 0
 
+type Shape = 'square' | 'star' | 'circle'
+
 interface FireOpts {
   particleCount?: number
   originX?: number
   originY?: number
   colors?: string[]
-  shape?: 'square' | 'star'
+  /** Single shape OR mixed assortment. Defaults to mixed. */
+  shape?: Shape | 'mixed' | Shape[]
   startVelocity?: number
   spread?: number
   gravity?: number
@@ -63,10 +68,38 @@ function drawStar(
   ctx.fill()
 }
 
+function drawCircle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number
+): void {
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** Pick a shape for a particle given the caller's preference. */
+function pickShape(pref: FireOpts['shape']): Shape {
+  if (Array.isArray(pref)) {
+    return pref[Math.floor(Math.random() * pref.length)] ?? 'square'
+  }
+  if (pref === 'mixed' || pref === undefined) {
+    // Weighted mix: a bit heavier on squares so it still feels like confetti,
+    // but stars and circles add visual variety.
+    const r = Math.random()
+    if (r < 0.5) return 'square'
+    if (r < 0.8) return 'circle'
+    return 'star'
+  }
+  return pref
+}
+
 function fireConfetti(opts: FireOpts = {}): void {
   const count = opts.particleCount ?? 160
   const colors = opts.colors ?? COLORS
-  const shape = opts.shape ?? 'square'
+  const shapePref: FireOpts['shape'] = opts.shape ?? 'mixed'
   const spread = opts.spread ?? Math.PI * 1.6
   const startVel = opts.startVelocity ?? 9
   const gravity = opts.gravity ?? 0.25
@@ -109,7 +142,7 @@ function fireConfetti(opts: FireOpts = {}): void {
       color: colors[Math.floor(Math.random() * colors.length)]!,
       size: (7 + Math.random() * 5) * scalar,
       alpha: 1,
-      kind: shape
+      kind: pickShape(shapePref)
     })
   }
 
@@ -140,6 +173,8 @@ function fireConfetti(opts: FireOpts = {}): void {
       ctx!.fillStyle = p.color
       if (p.kind === 'star') {
         drawStar(ctx!, p.x, p.y, p.size * 0.9, p.rot)
+      } else if (p.kind === 'circle') {
+        drawCircle(ctx!, p.x, p.y, p.size * 0.5)
       } else {
         ctx!.translate(p.x, p.y)
         ctx!.rotate(p.rot)
@@ -199,13 +234,14 @@ export function burstNow(): void {
 export function fireStarBurst(): void {
   if (!document.body) return
   const common: FireOpts = {
-    particleCount: 60,
+    particleCount: 70,
     spread: Math.PI * 0.6,
     startVelocity: 12,
     gravity: 0.7,
     scalar: 1.6,
     ticks: 220,
-    shape: 'star',
+    // Stars and circles mixed — tied to the brand (blue palette).
+    shape: ['star', 'circle'],
     colors: STAR_COLORS
   }
   fireConfetti({ ...common, originX: 0.12, originY: 0.55 })

@@ -90,3 +90,11 @@ export function nextMonth(ym: string): string {
   const m = month === 12 ? 1 : month + 1
   return formatMonth(y, m)
 }
+
+/** "YYYY-MM" → the PREVIOUS month, rolling back across year boundaries. */
+export function previousMonth(ym: string): string {
+  const { year, month } = parseMonth(ym)
+  const y = month === 1 ? year - 1 : year
+  const m = month === 1 ? 12 : month - 1
+  return formatMonth(y, m)
+}

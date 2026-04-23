@@ -31,12 +31,12 @@ export function weeklyView(ctx: ViewContext): HTMLElement {
     }
 
     const head = document.createElement('div')
-    head.className = 'flex items-baseline justify-between mb-1 px-1'
+    head.className = 'flex items-baseline justify-between mb-2 px-1'
     const dayName = document.createElement('div')
-    dayName.className = 'font-semibold text-sm'
+    dayName.className = 'font-bold text-[22px] leading-none'
     dayName.textContent = formatInTimeZone(d, timezone, 'EEE')
     const dayNum = document.createElement('div')
-    dayNum.className = 'text-xs opacity-60'
+    dayNum.className = 'text-[14px] opacity-70'
     dayNum.textContent = formatInTimeZone(d, timezone, 'MMM d')
     head.appendChild(dayName)
     head.appendChild(dayNum)

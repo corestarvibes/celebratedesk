@@ -3,9 +3,11 @@ import { bootstrap, getState, setState } from '../state'
 import { toast } from '../components/Toast'
 import { applyTheme } from '../components/TopBar'
 import { burstNow } from '../components/ConfettiOverlay'
+import { dropZone } from '../components/DropZone'
 import {
   attendanceSection,
   coachesSection,
+  eventsSection,
   motmSection,
   qrCodesSection
 } from './settingsSections'
@@ -65,6 +67,8 @@ export async function openSettings(_initialSection?: string): Promise<void> {
 
   // --- Scraper config ---
   panel.appendChild(section('Member of the Month', motmSection()))
+
+  panel.appendChild(section('Events', eventsSection()))
 
   panel.appendChild(section('Coach Rotation', coachesSection()))
 
@@ -185,9 +189,9 @@ function brandingSection(settings: AppSettings): HTMLElement {
   reset.textContent = 'Reset branding to defaults'
   reset.addEventListener('click', async () => {
     await window.celebAPI.settings.set('brandName', 'CelebrateDesk')
-    await window.celebAPI.settings.set('accentColor', '#f59e0b')
+    await window.celebAPI.settings.set('accentColor', '#38bdf8')
     await window.celebAPI.settings.set('logoPath', null)
-    document.documentElement.style.setProperty('--brand-primary', '#f59e0b')
+    document.documentElement.style.setProperty('--brand-primary', '#38bdf8')
     await bootstrap()
     toast('Branding reset', 'success')
     closeModal()
@@ -235,31 +239,63 @@ function dataSection(settings: AppSettings): HTMLElement {
     })
   )
 
-  const row = document.createElement('div')
-  row.className = 'flex gap-2 flex-wrap'
-  const importBtn = document.createElement('button')
-  importBtn.className = 'btn btn-ghost'
-  importBtn.textContent = 'Import Events CSV… (birthdays / anniversaries)'
-  importBtn.addEventListener('click', async () => {
-    const path = await window.celebAPI.system.openFilePicker([
-      { name: 'CSV', extensions: ['csv'] }
-    ])
-    if (!path) return
+  // Rolling-window filter: default to the start of the CURRENT month so
+  // everything from "today onward, plus the rest of this month" is imported.
+  // The import button reads this field and passes it to the IPC, which only
+  // accepts events whose next occurrence is on-or-after this date.
+  const now = new Date()
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const fromMonthWrap = document.createElement('label')
+  fromMonthWrap.className = 'flex flex-col gap-1 text-sm'
+  const fromMonthLabel = document.createElement('span')
+  fromMonthLabel.className = 'opacity-70'
+  fromMonthLabel.textContent =
+    'Only import events happening in this month or later (leave blank to import all)'
+  const fromMonthInput = document.createElement('input')
+  fromMonthInput.type = 'month'
+  fromMonthInput.value = defaultMonth
+  fromMonthInput.className =
+    'w-full h-10 px-3 rounded-brand border border-slate-400/30 bg-transparent focus:outline-none focus:border-brand-primary'
+  fromMonthWrap.appendChild(fromMonthLabel)
+  fromMonthWrap.appendChild(fromMonthInput)
+  body.appendChild(fromMonthWrap)
+
+  // Shared handler — used by both the drop zone and the explicit button.
+  const importEventsCsv = async (path: string): Promise<void> => {
     try {
       const txt = await window.celebAPI.system.readTextFile(path)
-      const res = await window.celebAPI.db.importCSV(txt)
+      const monthValue = fromMonthInput.value.trim()
+      const fromDate = /^\d{4}-\d{2}$/.test(monthValue) ? `${monthValue}-01` : undefined
+      const res = await window.celebAPI.db.importCSV(txt, { fromDate })
       const errs = res.errors?.length ?? 0
       if (errs > 0) {
         showImportErrors(res)
       } else {
-        toast(`Imported ${res.inserted} new, ${res.updated} updated`, 'success')
+        const skippedMsg = res.skipped
+          ? ` · skipped ${res.skipped} events before ${monthValue}`
+          : ''
+        toast(
+          `Imported ${res.inserted} new, ${res.updated} updated${skippedMsg}`,
+          'success',
+          6000
+        )
       }
       await bootstrap()
     } catch (e) {
       toast(`Import failed: ${String(e)}`, 'error')
     }
-  })
-  row.appendChild(importBtn)
+  }
+
+  body.appendChild(
+    dropZone({
+      label: 'Drop Events CSV here (birthdays / anniversaries) or click to browse',
+      extensions: ['csv', 'tsv', 'txt'],
+      onFile: importEventsCsv
+    })
+  )
+
+  const row = document.createElement('div')
+  row.className = 'flex gap-2 flex-wrap'
 
   const exportBtn = document.createElement('button')
   exportBtn.className = 'btn btn-ghost'
@@ -316,6 +352,7 @@ function scraperSection(
 
   if (!getState().encryptionAvailable) {
     const warn = document.createElement('div')
+    // Safety warning stays amber — this is a semantic "caution" state, not brand color.
     warn.className = 'text-xs rounded-brand border border-amber-500 text-amber-500 p-2'
     warn.textContent =
       'Credential encryption is unavailable on this Linux configuration. Credentials will be stored in plaintext.'
@@ -398,15 +435,28 @@ function scraperSection(
   runBtn.className = 'btn btn-ghost'
   runBtn.textContent = 'Run scrape now'
   runBtn.addEventListener('click', async () => {
+    // eslint-disable-next-line no-console
+    console.log('[scraper] Run button clicked — calling scraper.runNow()')
     runBtn.disabled = true
+    const original = runBtn.textContent
+    runBtn.textContent = 'Scraping… (can take 30–60s)'
     try {
       const res = await window.celebAPI.scraper.runNow()
+      // eslint-disable-next-line no-console
+      console.log('[scraper] runNow returned:', res)
       if (res.success) {
         toast(`Scraped ${res.count} events`, 'success')
         await bootstrap()
-      } else toast(res.error ?? 'Scrape failed', 'error')
+      } else {
+        toast(res.error ?? 'Scrape failed — see terminal', 'error', 8000)
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[scraper] runNow threw:', err)
+      toast(`Scraper crashed: ${String(err)}`, 'error', 8000)
     } finally {
       runBtn.disabled = false
+      runBtn.textContent = original
     }
   })
   actions.appendChild(saveBtn)

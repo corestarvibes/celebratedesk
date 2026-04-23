@@ -15,6 +15,13 @@ export interface CelebEvent {
   lastScraped?: string
   createdAt: string
   updatedAt: string
+  // Added in DB migration 3 — primarily used by the Events view but available on all rows.
+  /** Multi-day events: YYYY-MM-DD end date. */
+  end_date?: string
+  /** Free-form location string. */
+  location?: string
+  /** URL rendered as a QR code on the Events view. */
+  event_url?: string
 }
 
 /** Computed at read time — never stored. */

@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 import type { QRCodeEntry } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
 
-const QR_PX = 200
+const QR_PX = 380
 
 async function renderQRCanvas(url: string): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas')
@@ -45,19 +45,20 @@ export function qrCodesView(_ctx: ViewContext): HTMLElement {
     'fade-in h-full w-full bg-gradient-to-b from-black to-slate-900 text-white flex flex-col gap-4 p-6'
 
   const header = document.createElement('h2')
-  header.className = 'text-[20px] font-semibold'
+  header.className = 'text-[36px] font-bold'
   header.textContent = 'Scan to connect'
   root.appendChild(header)
 
   const grid = document.createElement('div')
-  // Strict 2×2 grid. Each cell gets half of (viewport - header/nav) height.
+  // Single row of 4 cards across the whole screen — better for a 50" TV
+  // viewed from across the room than a 2×2 with half-sized codes.
   grid.style.display = 'grid'
-  grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
-  grid.style.gridTemplateRows = 'repeat(2, minmax(0, 1fr))'
-  grid.style.gap = '16px'
+  grid.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))'
+  grid.style.gap = '20px'
   grid.style.flex = '1 1 0%'
   grid.style.minHeight = '0'
   grid.style.width = '100%'
+  grid.style.alignItems = 'stretch'
   root.appendChild(grid)
 
   void window.celebAPI.settings.get('qrCodes').then(async (raw) => {
@@ -96,7 +97,7 @@ async function renderCard(entry: QRCodeEntry): Promise<HTMLElement> {
 
   // 1. Emoji
   const icon = document.createElement('div')
-  icon.style.fontSize = '32px'
+  icon.style.fontSize = '64px'
   icon.style.lineHeight = '1'
   icon.style.flexShrink = '0'
   icon.textContent = entry.icon || '📱'
@@ -108,18 +109,18 @@ async function renderCard(entry: QRCodeEntry): Promise<HTMLElement> {
 
   // 3. Label
   const label = document.createElement('div')
-  label.style.fontSize = '16px'
+  label.style.fontSize = '30px'
   label.style.fontWeight = '700'
   label.style.color = '#ffffff'
   label.style.textAlign = 'center'
-  label.style.lineHeight = '1.25'
+  label.style.lineHeight = '1.2'
   label.style.flexShrink = '0'
   label.textContent = entry.label || '(no label)'
   card.appendChild(label)
 
-  // 4. URL
+  // 4. URL (keep small — display-wall viewers aren't reading full URLs)
   const urlEl = document.createElement('div')
-  urlEl.style.fontSize = '11px'
+  urlEl.style.fontSize = '12px'
   urlEl.style.color = 'rgb(148, 163, 184)' // slate-400
   urlEl.style.textAlign = 'center'
   urlEl.style.maxWidth = '100%'

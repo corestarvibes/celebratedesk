@@ -3,15 +3,26 @@
 
 import type {
   AttendanceRow,
+  CelebEvent,
+  CelebEventComputed,
   MotmMember,
   MotmQA,
   QRCodeEntry
 } from '@shared/types'
 import QRCode from 'qrcode'
 import { parseAttendanceCsv } from '@utils/attendanceCsvParser'
-import { currentMonthInTz, getRotationSchedule, nextMonth } from '@utils/coachRotation'
+import {
+  currentMonthInTz,
+  getRotationSchedule,
+  nextMonth,
+  previousMonth
+} from '@utils/coachRotation'
+import { formatDisplayDate } from '@utils/dateHelpers'
 import { toast } from '../components/Toast'
 import { fileUrl } from '../utils/fileUrl'
+import { openEventForm } from './EventFormModal'
+import { refreshEvents, subscribe } from '../state'
+import { dropZone } from '../components/DropZone'
 
 // ─── Section: MOTM Manager ─────────────────────────────────────────────────
 export function motmSection(): HTMLElement {
@@ -37,12 +48,79 @@ export function motmSection(): HTMLElement {
     }
   }
 
+  const actions = document.createElement('div')
+  actions.className = 'flex gap-2 flex-wrap'
+
   const addBtn = document.createElement('button')
-  addBtn.className = 'btn btn-primary self-start'
+  addBtn.className = 'btn btn-primary'
   addBtn.textContent = '＋ Add member'
   addBtn.addEventListener('click', () => openMotmForm(null, refreshList))
-  body.appendChild(addBtn)
+  actions.appendChild(addBtn)
 
+  const swapAllBtn = document.createElement('button')
+  swapAllBtn.className = 'btn btn-ghost'
+  swapAllBtn.textContent = '↕ Swap Q↔A for all members'
+  swapAllBtn.title =
+    'Use if your imported Q&A pairs are reversed everywhere — swaps question/answer for every pair of every member.'
+  swapAllBtn.addEventListener('click', async () => {
+    const all = await window.celebAPI.motm.getAll()
+    const pairCount = all.reduce((n, m) => n + m.qa.length, 0)
+    if (pairCount === 0) {
+      toast('No Q&A pairs to swap.', 'info')
+      return
+    }
+    if (
+      !confirm(
+        `Swap question↔answer for all ${pairCount} pair${pairCount === 1 ? '' : 's'} across ${all.length} member${all.length === 1 ? '' : 's'}?\n\nThis cannot be undone (but running it a second time returns you to the original).`
+      )
+    ) {
+      return
+    }
+    for (const m of all) {
+      await window.celebAPI.motm.upsert({
+        ...m,
+        qa: m.qa.map((p) => ({ question: p.answer, answer: p.question }))
+      })
+    }
+    toast(`Swapped ${pairCount} pairs across ${all.length} members`, 'success')
+    await refreshList()
+  })
+  actions.appendChild(swapAllBtn)
+
+  const cleanPrefixesBtn = document.createElement('button')
+  cleanPrefixesBtn.className = 'btn btn-ghost'
+  cleanPrefixesBtn.textContent = '✂ Clean Q:/A: prefixes'
+  cleanPrefixesBtn.title =
+    'Strip any leading "Q:", "A:", "Question:", or "Answer:" from every stored pair. The display adds its own Q — / A — labels, so removing these avoids doubled-up prefixes.'
+  cleanPrefixesBtn.addEventListener('click', async () => {
+    const all = await window.celebAPI.motm.getAll()
+    const prefixRe = /^\s*(?:q|a|question|answer)\s*[:.)\-–—]\s*/i
+    let changed = 0
+    for (const m of all) {
+      const cleaned = m.qa.map((p) => ({
+        question: (p.question ?? '').replace(prefixRe, '').trim(),
+        answer: (p.answer ?? '').replace(prefixRe, '').trim()
+      }))
+      const anyDifferent = cleaned.some(
+        (p, i) =>
+          p.question !== m.qa[i]?.question || p.answer !== m.qa[i]?.answer
+      )
+      if (anyDifferent) {
+        await window.celebAPI.motm.upsert({ ...m, qa: cleaned })
+        changed++
+      }
+    }
+    toast(
+      changed === 0
+        ? 'Nothing to clean — pairs were already tidy.'
+        : `Cleaned Q:/A: prefixes in ${changed} member${changed === 1 ? '' : 's'}`,
+      changed === 0 ? 'info' : 'success'
+    )
+    await refreshList()
+  })
+  actions.appendChild(cleanPrefixesBtn)
+
+  body.appendChild(actions)
   void refreshList()
   return body
 }
@@ -74,7 +152,7 @@ function memberRow(m: MotmMember, onChange: () => Promise<void>): HTMLElement {
   if (m.isActive) {
     const active = document.createElement('span')
     active.className = 'type-badge'
-    active.style.background = 'rgba(245, 158, 11, 0.2)'
+    active.style.background = 'rgba(56, 189, 248, 0.2)'
     active.style.color = 'var(--brand-primary)'
     active.textContent = `Active · ${m.activeMonth ?? ''}`
     name.appendChild(active)
@@ -282,6 +360,19 @@ function openMotmForm(existing: MotmMember | null, onSaved: () => Promise<void>)
     pairs.push({ question: '', answer: '' })
     renderPairs()
   })
+
+  const swapBtn = document.createElement('button')
+  swapBtn.type = 'button'
+  swapBtn.className = 'btn btn-ghost'
+  swapBtn.textContent = '↕ Swap Q↔A'
+  swapBtn.title = 'Swap question and answer for every pair — use if imported data is reversed'
+  swapBtn.addEventListener('click', () => {
+    if (pairs.length === 0) return
+    if (!confirm(`Swap question and answer for all ${pairs.length} pairs?`)) return
+    pairs = pairs.map((p) => ({ question: p.answer, answer: p.question }))
+    renderPairs()
+    toast('Swapped all Q↔A pairs', 'success')
+  })
   const importDocx = document.createElement('button')
   importDocx.type = 'button'
   importDocx.className = 'btn btn-ghost'
@@ -324,6 +415,7 @@ function openMotmForm(existing: MotmMember | null, onSaved: () => Promise<void>)
     toast(`Parsed ${res.pairs.length} pairs`, 'success')
   })
   qaActions.appendChild(addPair)
+  qaActions.appendChild(swapBtn)
   qaActions.appendChild(importDocx)
   qaActions.appendChild(pasteText)
   qaWrap.appendChild(qaActions)
@@ -429,6 +521,18 @@ function pairEditor(
       rerender()
     }
   })
+  const swap = document.createElement('button')
+  swap.type = 'button'
+  swap.className = 'icon-btn text-xs'
+  swap.title = 'Swap this Q and A'
+  swap.textContent = '↕'
+  swap.addEventListener('click', () => {
+    const tmp = pair.question
+    pair.question = pair.answer
+    pair.answer = tmp
+    rerender()
+  })
+
   const del = document.createElement('button')
   del.type = 'button'
   del.className = 'icon-btn text-rose-500 text-xs'
@@ -439,6 +543,7 @@ function pairEditor(
   })
   header.appendChild(up)
   header.appendChild(down)
+  header.appendChild(swap)
   header.appendChild(del)
   wrap.appendChild(header)
 
@@ -563,8 +668,8 @@ export function coachesSection(): HTMLElement {
         if (c.id === thisPicker) {
           const b = document.createElement('span')
           b.className = 'type-badge'
-          b.style.background = 'rgba(255, 215, 0, 0.2)'
-          b.style.color = '#FFD700'
+          b.style.background = 'rgba(56, 189, 248, 0.2)'
+          b.style.color = 'var(--brand-primary)'
           b.textContent = `🗓 ${new Date(thisMonth + '-01').toLocaleString('en-US', { month: 'long' })}'s pick`
           row.appendChild(b)
         } else if (c.id === nextPicker) {
@@ -631,7 +736,9 @@ export function attendanceSection(): HTMLElement {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const monthInput = document.createElement('input')
   monthInput.type = 'month'
-  monthInput.value = currentMonthInTz(tz)
+  // Default to the previous month — ChalkItPro attendance data is typically
+  // for the just-completed month, not the one in progress.
+  monthInput.value = previousMonth(currentMonthInTz(tz))
   monthInput.className =
     'h-10 px-3 rounded-brand border border-slate-400/30 bg-transparent focus:outline-none focus:border-brand-primary'
   const monthLabel = document.createElement('label')
@@ -643,14 +750,8 @@ export function attendanceSection(): HTMLElement {
   monthLabel.appendChild(monthInput)
   body.appendChild(monthLabel)
 
-  const importBtn = document.createElement('button')
-  importBtn.className = 'btn btn-primary self-start'
-  importBtn.textContent = 'Import Attendance CSV…'
-  importBtn.addEventListener('click', async () => {
-    const path = await window.celebAPI.system.openFilePicker([
-      { name: 'CSV', extensions: ['csv'] }
-    ])
-    if (!path) return
+  // Shared handler used by both the drop zone and the explicit button.
+  const importAttendance = async (path: string): Promise<void> => {
     try {
       const txt = await window.celebAPI.system.readTextFile(path)
       const parsed = parseAttendanceCsv(txt)
@@ -673,8 +774,15 @@ export function attendanceSection(): HTMLElement {
     } catch (err) {
       toast(`Import failed: ${String(err)}`, 'error')
     }
-  })
-  body.appendChild(importBtn)
+  }
+
+  body.appendChild(
+    dropZone({
+      label: 'Drop Attendance CSV here or click to browse',
+      extensions: ['csv', 'tsv', 'txt'],
+      onFile: importAttendance
+    })
+  )
 
   const clearBtn = document.createElement('button')
   clearBtn.className = 'btn btn-ghost text-rose-500 self-start'
@@ -820,3 +928,170 @@ export function qrCodesSection(): HTMLElement {
 
 // Import AttendanceRow so TypeScript doesn't drop the type.
 export type { AttendanceRow }
+
+// ─── Section: Events Manager (for the Events view) ────────────────────────
+/** Lists all events of type 'event' or 'custom' with inline edit + delete,
+ *  plus a "+ New event" button that opens the standard form pre-filled for
+ *  type=event. These are the rows that appear on the 📅 Events tab. */
+export function eventsSection(): HTMLElement {
+  const body = document.createElement('div')
+  body.className = 'flex flex-col gap-3'
+
+  const listWrap = document.createElement('div')
+  listWrap.className = 'flex flex-col gap-2'
+  body.appendChild(listWrap)
+
+  async function refreshList(): Promise<void> {
+    const all = await window.celebAPI.db.getAll()
+    const events = (all as CelebEventComputed[])
+      .filter((e) => e.type === 'event' || e.type === 'custom')
+      .sort((a, b) => a.date.localeCompare(b.date))
+    listWrap.replaceChildren()
+    if (events.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'text-xs opacity-60'
+      empty.textContent =
+        'No events yet. Click "+ New event" below. Birthdays and anniversaries are managed via CSV import or clicking their cards in the Today/Week/Month views.'
+      listWrap.appendChild(empty)
+      return
+    }
+    for (const ev of events) {
+      listWrap.appendChild(eventRow(ev, refreshList))
+    }
+  }
+
+  const actions = document.createElement('div')
+  actions.className = 'flex gap-2 flex-wrap'
+  const addBtn = document.createElement('button')
+  addBtn.className = 'btn btn-primary'
+  addBtn.textContent = '＋ New event'
+  addBtn.addEventListener('click', () => {
+    // Seed a blank event object that EventFormModal accepts as "existing"-null.
+    // We pass null so the form opens in "create" mode; the form defaults
+    // type to 'birthday'. Change it to 'event' via the dropdown before saving.
+    openEventForm(null)
+  })
+  actions.appendChild(addBtn)
+
+  const hint = document.createElement('span')
+  hint.className = 'text-xs opacity-60 self-center'
+  hint.textContent = '← remember to set Type to "event" and fill in URL + location'
+  actions.appendChild(hint)
+
+  body.appendChild(actions)
+
+  // Re-run refresh when the global events list changes (e.g. after save/delete).
+  subscribe(() => {
+    void refreshList()
+  })
+  void refreshList()
+
+  return body
+}
+
+function eventRow(
+  ev: CelebEventComputed,
+  onChange: () => Promise<void>
+): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'surface p-3 flex items-center gap-3'
+
+  // Thumb: photo if any, else a type glyph.
+  const thumb = document.createElement('div')
+  thumb.className =
+    'w-14 h-14 rounded-brand overflow-hidden bg-slate-700 flex-shrink-0 flex items-center justify-center text-2xl'
+  if (ev.photo_url) {
+    const img = document.createElement('img')
+    img.src = fileUrl(ev.photo_url)
+    img.className = 'w-full h-full object-cover'
+    thumb.appendChild(img)
+  } else {
+    thumb.textContent = ev.type === 'event' ? '📅' : '✨'
+  }
+  row.appendChild(thumb)
+
+  const bodyCol = document.createElement('div')
+  bodyCol.className = 'flex-1 min-w-0'
+
+  const nameLine = document.createElement('div')
+  nameLine.className = 'font-semibold flex items-center gap-2 flex-wrap'
+  const name = document.createElement('span')
+  name.className = 'truncate'
+  name.textContent = ev.name
+  nameLine.appendChild(name)
+  const typeBadge = document.createElement('span')
+  typeBadge.className = 'type-badge'
+  typeBadge.style.fontSize = '11px'
+  typeBadge.textContent = ev.type
+  nameLine.appendChild(typeBadge)
+  if (ev.event_url) {
+    const qrBadge = document.createElement('span')
+    qrBadge.className = 'type-badge'
+    qrBadge.style.fontSize = '11px'
+    qrBadge.style.color = 'var(--brand-primary)'
+    qrBadge.style.borderColor = 'var(--brand-primary)'
+    qrBadge.textContent = '📱 QR'
+    nameLine.appendChild(qrBadge)
+  }
+  bodyCol.appendChild(nameLine)
+
+  const meta = document.createElement('div')
+  meta.className = 'text-xs opacity-70 mt-0.5 flex gap-3 flex-wrap'
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const when = ev.end_date
+    ? `${formatDisplayDate(ev.date, tz)} – ${formatDisplayDate(ev.end_date, tz)}`
+    : formatDisplayDate(ev.date, tz)
+  const whenSpan = document.createElement('span')
+  whenSpan.textContent = `📅 ${when}`
+  meta.appendChild(whenSpan)
+  if (ev.location) {
+    const loc = document.createElement('span')
+    loc.textContent = `📍 ${ev.location}`
+    meta.appendChild(loc)
+  }
+  const daysSpan = document.createElement('span')
+  daysSpan.textContent =
+    ev.daysUntil === 0 ? 'Today' : ev.daysUntil === 1 ? 'Tomorrow' : `in ${ev.daysUntil} days`
+  daysSpan.className = ev.daysUntil < 0 ? 'text-slate-500' : ''
+  meta.appendChild(daysSpan)
+  bodyCol.appendChild(meta)
+
+  if (ev.notes) {
+    const notes = document.createElement('div')
+    notes.className = 'text-xs opacity-50 mt-0.5 truncate'
+    notes.textContent = ev.notes
+    bodyCol.appendChild(notes)
+  }
+
+  row.appendChild(bodyCol)
+
+  const btns = document.createElement('div')
+  btns.className = 'flex gap-1 flex-shrink-0'
+
+  const edit = document.createElement('button')
+  edit.className = 'icon-btn'
+  edit.title = 'Edit'
+  edit.textContent = '✏'
+  edit.addEventListener('click', () => openEventForm(ev))
+
+  const del = document.createElement('button')
+  del.className = 'icon-btn text-rose-500'
+  del.title = 'Delete'
+  del.textContent = '🗑'
+  del.addEventListener('click', async () => {
+    if (!confirm(`Delete "${ev.name}"?`)) return
+    await window.celebAPI.db.delete(ev.id)
+    await refreshEvents()
+    await onChange()
+    toast('Event deleted', 'success')
+  })
+
+  btns.appendChild(edit)
+  btns.appendChild(del)
+  row.appendChild(btns)
+
+  return row
+}
+
+// Keep CelebEvent re-exported so downstream imports resolve.
+export type { CelebEvent }
