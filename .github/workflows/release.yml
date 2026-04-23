@@ -61,3 +61,12 @@ jobs:
         run: npm run build:win -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # electron-builder creates the release as a draft so you can edit
+      # release notes before going public. For a kiosk device that
+      # auto-updates, we want the release live immediately.
+      - name: Promote draft release to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false
+        shell: bash
