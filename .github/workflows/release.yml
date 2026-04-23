@@ -1,0 +1,63 @@
+# Build + publish a Windows release.
+#
+# Triggered by pushing a git tag like `v1.0.1`. Produces a signed-only-by-
+# GitHub installer at `dist-electron/celebratedesk-<version>-setup.exe` and
+# attaches it to a draft GitHub Release. electron-builder also publishes
+# the `latest.yml` manifest that `electron-updater` reads on the mini PC
+# to detect the new version.
+#
+# The mini PC polls GitHub Releases every 4 hours (see src/main/updater.ts),
+# downloads in the background, and installs the update the next time the
+# app quits. No manual intervention needed after this workflow succeeds.
+#
+# Note: we don't code-sign (cert costs $300/yr for a gym TV — not worth it).
+# Windows SmartScreen shows a one-time warning on first install; after that
+# electron-updater's silent differential updates work fine without signing.
+
+name: Release (Windows)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write  # required to upload release assets
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Native modules (better-sqlite3, sharp) build against Electron's
+      # Node ABI. electron-builder's postinstall handles this, but we set
+      # PYTHON explicitly because node-gyp still looks for it on Windows.
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # Disable husky / prepare scripts that might try to run git hooks
+          # in CI where .git metadata is shallow.
+          HUSKY: '0'
+
+      - name: Typecheck + bundle
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      # electron-builder reads `publish: github` from electron-builder.yml
+      # and uses GH_TOKEN to create/update the draft release. The job runs
+      # on a tag push, so the release version matches the tag name.
+      - name: Build + publish installer
+        run: npm run build:win -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

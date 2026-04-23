@@ -44,8 +44,7 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-# To enable GitHub auto-updates, uncomment and configure:
-# publish:
-#   provider: github
-#   owner: your-github-username
-#   repo: celebratedesk
+publish:
+  provider: github
+  owner: corestarvibes
+  repo: celebratedesk

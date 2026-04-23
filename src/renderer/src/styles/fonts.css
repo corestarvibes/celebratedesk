@@ -1,0 +1,44 @@
+/* Locally-bundled fonts (latin subset only — gym is US-based).
+ *
+ * Source: Google Fonts CSS2 API (April 2026). Google dedupes all Montserrat
+ * weights in the latin subset to one woff2, so we match that: one file,
+ * three @font-face declarations. Bebas Neue ships as its own file.
+ *
+ * To refresh, re-fetch:
+ *   curl -A "Mozilla/5.0 (...) Chrome/120" \
+ *     "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600;700&display=swap"
+ * with a Chrome UA so you get woff2 (not truetype), keep only the `/* latin *\/`
+ * blocks, download each unique woff2 once, and rewrite src: urls to /fonts/*.
+ */
+
+@font-face {
+  font-family: 'Bebas Neue';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/BebasNeue-latin.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/Montserrat-latin.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/Montserrat-latin.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonts/Montserrat-latin.woff2) format('woff2');
+}
