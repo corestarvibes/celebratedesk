@@ -230,9 +230,84 @@ Check:
 only thing that's irreplaceable (events, MOTM photos, attendance history).
 The app binary itself is always re-downloadable from GitHub.
 
+See Part 6 for the automated Google Drive backup script.
+
 ---
 
-## Part 6 — Known gotchas
+## Part 6 — Automated backups to Google Drive
+
+A zip of the entire `Roaming\celebratedesk\` folder is pushed to Google
+Drive every night at 3 AM. Keeps 14 daily + 8 weekly snapshots (~3 months
+of history).
+
+### 6a. One-time setup on the mini PC
+
+1. **Install Google Drive for Desktop.** Download from
+   <https://www.google.com/drive/download/> → install → sign in with the
+   gym's Google account → pick **Stream files** during setup (this mounts
+   Drive as the `G:` drive letter, which is what the backup script
+   expects).
+2. **Create the backup folder in Drive.** Go to drive.google.com → My
+   Drive → New folder → name it `CelebrateDesk Backups`. (The script
+   won't create it — Drive for Desktop only syncs folders that already
+   exist in Drive.)
+3. **Clone the repo somewhere on the mini PC** — a spot the gym user can
+   read is fine, e.g. `C:\Users\<user>\celebratedesk-repo`:
+   ```
+   git clone https://github.com/corestarvibes/celebratedesk.git
+   ```
+   (You can also just download the two PowerShell scripts from the repo's
+   `scripts/backup/` folder and drop them anywhere.)
+4. **Register the scheduled task.** Open PowerShell as the gym user
+   (not elevated), then:
+   ```
+   cd C:\Users\<user>\celebratedesk-repo\scripts\backup
+   powershell -ExecutionPolicy Bypass -File install-backup-task.ps1
+   ```
+   You should see `✓ Task 'CelebrateDesk Daily Backup' installed`.
+
+### 6b. Verify it works
+
+```
+Start-ScheduledTask -TaskName 'CelebrateDesk Daily Backup'
+Get-ScheduledTaskInfo -TaskName 'CelebrateDesk Daily Backup'
+```
+
+Then check:
+- `%APPDATA%\celebratedesk\logs\backup.log` for the run log
+- `G:\My Drive\CelebrateDesk Backups\` for the new zip
+- drive.google.com — the zip should appear within a minute (Drive sync
+  uploads async)
+
+### 6c. Restore from a backup
+
+On the mini PC:
+1. Close CelebrateDesk
+2. Download the zip you want from drive.google.com
+3. Delete `%APPDATA%\celebratedesk\` (or rename it to keep the current
+   state as a safety copy)
+4. Extract the zip — the inner `celebratedesk` folder is what goes in
+   `%APPDATA%\`
+5. Launch CelebrateDesk — it reads the restored DB + settings on startup
+
+### 6d. What's included vs excluded
+
+Included: `events.db`, `config.json`, all uploaded photos (logo, MOTM,
+events), and any other files Electron wrote to userData.
+
+Excluded: the `logs\` subfolder (not worth snapshotting every day) and
+the update cache (regenerable).
+
+### 6e. Storage usage
+
+A fresh install is ~100 KB. After importing a year of events + a few MOTM
+photos + a logo, expect ~5–20 MB per snapshot. With 14 dailies + 8
+weeklies the total footprint is well under 500 MB — Drive's free tier
+(15 GB) is plenty.
+
+---
+
+## Part 7 — Known gotchas
 
 - **First install shows SmartScreen warning.** Once only. Updates bypass.
 - **Windows may reboot overnight for updates.** Set Active Hours wide.
