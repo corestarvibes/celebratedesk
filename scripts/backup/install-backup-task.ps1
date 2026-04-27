@@ -70,7 +70,7 @@ Register-ScheduledTask `
     -Description "Daily zip backup of %APPDATA%\celebratedesk to Google Drive." | Out-Null
 
 Write-Host ""
-Write-Host "✓ Task '$TaskName' installed. Runs daily at $TriggerTime." -ForegroundColor Green
+Write-Host "[OK] Task '$TaskName' installed. Runs daily at $TriggerTime." -ForegroundColor Green
 Write-Host ""
 Write-Host "To run it right now (for testing):"
 Write-Host "  Start-ScheduledTask -TaskName '$TaskName'"
