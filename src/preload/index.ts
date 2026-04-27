@@ -14,10 +14,11 @@ import type {
   OverlayParams,
   ParsedDocxResult,
   ScrapeResult,
-  ScraperStatus
+  ScraperStatus,
+  SyncStatus
 } from '../shared/types'
 
-type PushChannel = 'scrape-complete' | 'day-changed' | 'update-available'
+type PushChannel = 'scrape-complete' | 'day-changed' | 'update-available' | 'sync-status'
 type PushListener = (data: unknown) => void
 
 const listeners = new Map<PushListener, (e: IpcRendererEvent, data: unknown) => void>()
@@ -118,6 +119,19 @@ const celebAPI = {
       ipcRenderer.invoke('attendance:bulkUpsert', rows, month),
     clearMonth: (month: string): Promise<number> =>
       ipcRenderer.invoke('attendance:clearMonth', month)
+  },
+  sync: {
+    /** Snapshot the current state and push to Drive immediately (skips
+     *  the debounce). Used by the manual "Sync now" button. */
+    syncNow: (): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('sync:syncNow'),
+    /** Read the current sync status — useful on Settings panel mount
+     *  before the first push event arrives. */
+    getStatus: (): Promise<SyncStatus> => ipcRenderer.invoke('sync:getStatus'),
+    /** Toggle sync on/off. Returns ok=false if the platform isn't Mac
+     *  or Drive can't be located. */
+    setEnabled: (enabled: boolean): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('sync:setEnabled', enabled)
   },
   on: (channel: PushChannel, cb: PushListener): void => {
     const wrapped = (_e: IpcRendererEvent, data: unknown): void => cb(data)

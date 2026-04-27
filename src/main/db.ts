@@ -99,6 +99,13 @@ export function initDb(): Database.Database {
   return db
 }
 
+/** Returns the live DB handle (or null if not yet initialised). The sync
+ *  layer uses this to call `db.backup()` for transactionally consistent
+ *  snapshots that don't trip the WAL. */
+export function getDb(): Database.Database | null {
+  return db
+}
+
 function runMigrations(d: Database.Database): void {
   const current = (d.pragma('user_version', { simple: true }) as number) ?? 0
   const pending = migrations.filter((m) => m.version > current)

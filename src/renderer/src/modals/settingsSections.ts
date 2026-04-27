@@ -1093,5 +1093,144 @@ function eventRow(
   return row
 }
 
+// ─── Section: Sync to gym TVs ──────────────────────────────────────────────
+//
+// Mac-only writer UI. Toggles the writer side of the sync pipeline: every
+// save debounces a snapshot push to a Drive folder which the mini PCs poll.
+// On Windows this section renders a short note explaining that the
+// follower is configured via PowerShell scheduled task (out-of-band).
+//
+// Status updates flow in via the 'sync-status' IPC push channel.
+
+export function syncSection(): HTMLElement {
+  const body = document.createElement('div')
+  body.className = 'flex flex-col gap-3'
+
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    navigator.platform.toLowerCase().includes('mac')
+
+  if (!isMac) {
+    const note = document.createElement('div')
+    note.className = 'text-xs opacity-70 leading-relaxed'
+    note.innerHTML =
+      'This machine receives content from a Mac via the sync watcher ' +
+      '(installed by <code>setup.ps1</code>). Edits made here will be ' +
+      'overwritten the next time the Mac pushes a snapshot. To make ' +
+      'content changes, edit on the Mac.'
+    body.appendChild(note)
+    return body
+  }
+
+  // Status line — refreshed on every 'sync-status' push.
+  const statusLine = document.createElement('div')
+  statusLine.className = 'text-xs opacity-70 leading-relaxed'
+  statusLine.textContent = 'Loading sync status…'
+  body.appendChild(statusLine)
+
+  type SyncStatusUI =
+    | { kind: 'disabled' }
+    | { kind: 'idle'; folder: string; lastSnapshot: { timestamp: number; sha256: string } | null }
+    | { kind: 'pending' }
+    | { kind: 'syncing' }
+    | { kind: 'error'; message: string }
+
+  const renderStatus = (status: SyncStatusUI): void => {
+    let text = ''
+    switch (status.kind) {
+      case 'disabled':
+        text = 'Sync is off. Turn it on to push your edits to the gym TVs.'
+        break
+      case 'idle': {
+        const when = status.lastSnapshot
+          ? new Date(status.lastSnapshot.timestamp).toLocaleString()
+          : 'never'
+        text = `Ready. Last push: ${when}.`
+        break
+      }
+      case 'pending':
+        text = 'Edits detected — pushing in ~5 seconds…'
+        break
+      case 'syncing':
+        text = 'Pushing to Drive now…'
+        break
+      case 'error':
+        text = `Sync error: ${status.message}`
+        break
+    }
+    statusLine.textContent = text
+    statusLine.style.color = status.kind === 'error' ? '#dc2626' : ''
+  }
+
+  // Toggle row
+  const toggleRow = document.createElement('label')
+  toggleRow.className = 'flex items-center gap-2 cursor-pointer'
+  const toggle = document.createElement('input')
+  toggle.type = 'checkbox'
+  const toggleLabel = document.createElement('span')
+  toggleLabel.className = 'text-sm'
+  toggleLabel.textContent = 'Auto-sync to gym TVs on every save'
+  toggleRow.appendChild(toggle)
+  toggleRow.appendChild(toggleLabel)
+  body.appendChild(toggleRow)
+
+  // Manual button row
+  const actions = document.createElement('div')
+  actions.className = 'flex flex-wrap items-center gap-2'
+  const syncNowBtn = document.createElement('button')
+  syncNowBtn.className = 'btn btn-primary'
+  syncNowBtn.textContent = 'Sync now'
+  syncNowBtn.addEventListener('click', async () => {
+    syncNowBtn.disabled = true
+    syncNowBtn.textContent = 'Syncing…'
+    const result = await window.celebAPI.sync.syncNow()
+    syncNowBtn.disabled = false
+    syncNowBtn.textContent = 'Sync now'
+    if (!result.ok) toast(result.error ?? 'Sync failed', 'warning')
+    else toast('Synced to gym TVs', 'success')
+  })
+  actions.appendChild(syncNowBtn)
+  body.appendChild(actions)
+
+  // Helper text
+  const help = document.createElement('div')
+  help.className = 'text-xs opacity-60 leading-relaxed'
+  help.innerHTML =
+    'When auto-sync is on, every save (event, MOTM, attendance, photo, ' +
+    'settings) pushes a snapshot to your <code>CelebrateDesk Sync</code> ' +
+    'folder in Google Drive. Each gym TV checks Drive every minute and ' +
+    'auto-restores the latest snapshot. Round-trip is typically ' +
+    '60–90 seconds.'
+  body.appendChild(help)
+
+  // Wire toggle
+  toggle.addEventListener('change', async () => {
+    toggle.disabled = true
+    const result = await window.celebAPI.sync.setEnabled(toggle.checked)
+    toggle.disabled = false
+    if (!result.ok) {
+      toggle.checked = !toggle.checked
+      toast(result.error ?? 'Could not change sync state', 'warning')
+    }
+  })
+
+  // Initial state + subscribe to push updates
+  void (async (): Promise<void> => {
+    const status = (await window.celebAPI.sync.getStatus()) as SyncStatusUI
+    toggle.checked = status.kind !== 'disabled' && status.kind !== 'error'
+    renderStatus(status)
+    syncNowBtn.disabled = status.kind === 'disabled' || status.kind === 'syncing'
+  })()
+
+  window.celebAPI.on('sync-status', (payload: unknown) => {
+    const status = payload as SyncStatusUI
+    renderStatus(status)
+    if (status.kind === 'disabled') toggle.checked = false
+    syncNowBtn.disabled = status.kind === 'disabled' || status.kind === 'syncing'
+  })
+
+  return body
+}
+
 // Keep CelebEvent re-exported so downstream imports resolve.
 export type { CelebEvent }

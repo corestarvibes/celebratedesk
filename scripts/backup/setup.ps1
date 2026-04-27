@@ -1,13 +1,9 @@
-# CelebrateDesk - one-shot backup setup.
+# CelebrateDesk - one-shot mini PC setup.
 #
-# This is the ONLY script you need to run. It:
-#   1. Verifies CelebrateDesk has been installed and launched at least once
-#   2. Verifies Google Drive for Desktop is running and finds the drive letter
-#   3. Verifies (or creates) the "CelebrateDesk Backups" folder in Drive
-#   4. Downloads the latest backup-to-drive.ps1 + install-backup-task.ps1
-#   5. Registers the daily 3 AM scheduled task
-#   6. Runs the backup once as a smoke test
-#   7. Reports the result
+# Installs both pipelines on a fresh gym TV in one paste:
+#   - daily backup -> "CelebrateDesk Backups" folder in Drive (3 AM)
+#   - sync watcher -> polls "CelebrateDesk Sync" folder every minute,
+#     auto-restores when the Mac pushes a new content snapshot
 #
 # Paste this whole thing into PowerShell (regular, not admin):
 #
@@ -23,7 +19,7 @@ function Warn($msg) { Write-Host "    [!]  $msg" -ForegroundColor Yellow }
 function Err($msg)  { Write-Host "    [X]  $msg" -ForegroundColor Red }
 
 # ---------------------------------------------------------------------------
-Step "1/6  Checking CelebrateDesk is installed and has been launched"
+Step "1/8  Checking CelebrateDesk is installed and has been launched"
 $appData = Join-Path $env:APPDATA "celebratedesk"
 if (-not (Test-Path $appData)) {
     Err "Cannot find $appData"
@@ -34,9 +30,7 @@ if (-not (Test-Path $appData)) {
 Ok "Found $appData"
 
 # ---------------------------------------------------------------------------
-Step "2/6  Detecting Google Drive for Desktop mount point"
-# Drive for Desktop usually mounts as G:, but can be any letter. Find it by
-# scanning fixed drives for a "My Drive" subfolder.
+Step "2/8  Detecting Google Drive for Desktop mount point"
 $driveLetter = $null
 Get-PSDrive -PSProvider FileSystem | ForEach-Object {
     $myDrive = Join-Path $_.Root "My Drive"
@@ -54,53 +48,78 @@ if (-not $driveLetter) {
 Ok "Drive mounted at $driveLetter"
 
 $backupFolder = Join-Path $driveLetter "My Drive\CelebrateDesk Backups"
+$syncFolder   = Join-Path $driveLetter "My Drive\CelebrateDesk Sync"
 
 # ---------------------------------------------------------------------------
-Step "3/6  Ensuring 'CelebrateDesk Backups' folder exists in Drive"
-if (-not (Test-Path $backupFolder)) {
-    Warn "Folder not found, creating: $backupFolder"
-    try {
-        New-Item -ItemType Directory -Path $backupFolder -Force | Out-Null
-        Ok "Created. Drive will sync it within ~30 seconds."
+Step "3/8  Ensuring Drive folders exist"
+foreach ($f in @($backupFolder, $syncFolder)) {
+    if (-not (Test-Path $f)) {
+        Warn "Creating: $f"
+        try {
+            New-Item -ItemType Directory -Path $f -Force | Out-Null
+            Ok "Created. Drive will sync it within ~30 seconds."
+        }
+        catch {
+            Err "Could not create the folder: $_"
+            Err "Create it manually at drive.google.com under My Drive,"
+            Err "wait for it to appear locally, then re-run this script."
+            exit 1
+        }
     }
-    catch {
-        Err "Could not create the folder: $_"
-        Err "Create it manually at drive.google.com (My Drive -> New folder ->"
-        Err "'CelebrateDesk Backups'), wait for it to appear in $backupFolder,"
-        Err "then re-run this script."
-        exit 1
+    else {
+        Ok "Exists: $f"
     }
-}
-else {
-    Ok "Folder exists: $backupFolder"
 }
 
 # ---------------------------------------------------------------------------
-Step "4/6  Downloading backup scripts"
-$scriptDir = Join-Path $env:USERPROFILE "Desktop\celebratedesk-backup"
-if (-not (Test-Path $scriptDir)) {
-    New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
+Step "4/8  Downloading backup scripts"
+$backupDir = Join-Path $env:USERPROFILE "Desktop\celebratedesk-backup"
+if (-not (Test-Path $backupDir)) {
+    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 }
-$base = "https://raw.githubusercontent.com/corestarvibes/celebratedesk/main/scripts/backup"
+$backupBase = "https://raw.githubusercontent.com/corestarvibes/celebratedesk/main/scripts/backup"
 foreach ($name in @("backup-to-drive.ps1", "install-backup-task.ps1")) {
-    $dest = Join-Path $scriptDir $name
-    Invoke-WebRequest "$base/$name" -OutFile $dest -UseBasicParsing
-    Ok "$name -> $scriptDir"
+    $dest = Join-Path $backupDir $name
+    Invoke-WebRequest "$backupBase/$name" -OutFile $dest -UseBasicParsing
+    Ok "$name -> $backupDir"
 }
 
 # ---------------------------------------------------------------------------
-Step "5/6  Registering the daily 3 AM scheduled task"
-$installScript = Join-Path $scriptDir "install-backup-task.ps1"
-& powershell.exe -ExecutionPolicy Bypass -File $installScript -DriveFolder $backupFolder
+Step "5/8  Downloading sync scripts"
+$syncDir = Join-Path $env:USERPROFILE "Desktop\celebratedesk-sync"
+if (-not (Test-Path $syncDir)) {
+    New-Item -ItemType Directory -Path $syncDir -Force | Out-Null
+}
+$syncBase = "https://raw.githubusercontent.com/corestarvibes/celebratedesk/main/scripts/sync"
+foreach ($name in @("watch.ps1", "install-sync-watcher.ps1")) {
+    $dest = Join-Path $syncDir $name
+    Invoke-WebRequest "$syncBase/$name" -OutFile $dest -UseBasicParsing
+    Ok "$name -> $syncDir"
+}
+
+# ---------------------------------------------------------------------------
+Step "6/8  Registering daily backup task (3 AM)"
+$installBackup = Join-Path $backupDir "install-backup-task.ps1"
+& powershell.exe -ExecutionPolicy Bypass -File $installBackup -DriveFolder $backupFolder
 if ($LASTEXITCODE -ne 0) {
-    Err "Task installation failed (exit $LASTEXITCODE)"
+    Err "Backup task installation failed (exit $LASTEXITCODE)"
     exit 1
 }
-Ok "Task installed."
+Ok "Backup task installed."
 
 # ---------------------------------------------------------------------------
-Step "6/6  Running a smoke-test backup right now"
-$backupScript = Join-Path $scriptDir "backup-to-drive.ps1"
+Step "7/8  Registering sync watcher task (every minute)"
+$installWatcher = Join-Path $syncDir "install-sync-watcher.ps1"
+& powershell.exe -ExecutionPolicy Bypass -File $installWatcher -DriveFolder $syncFolder
+if ($LASTEXITCODE -ne 0) {
+    Err "Sync watcher installation failed (exit $LASTEXITCODE)"
+    exit 1
+}
+Ok "Sync watcher installed."
+
+# ---------------------------------------------------------------------------
+Step "8/8  Running a smoke-test backup right now"
+$backupScript = Join-Path $backupDir "backup-to-drive.ps1"
 & powershell.exe -ExecutionPolicy Bypass -File $backupScript -DriveFolder $backupFolder
 if ($LASTEXITCODE -ne 0) {
     Err "Smoke-test backup failed (exit $LASTEXITCODE)"
@@ -110,12 +129,17 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green
-Write-Host "  All set. Backups will run daily at 3 AM." -ForegroundColor Green
+Write-Host "  All set." -ForegroundColor Green
+Write-Host "  Backups: daily at 3 AM" -ForegroundColor Green
+Write-Host "  Sync watcher: every 60 seconds" -ForegroundColor Green
 Write-Host "================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Backups land in: $backupFolder"
-Write-Host "Logs:            $env:APPDATA\celebratedesk\logs\backup.log"
+Write-Host "Sync folder:     $syncFolder"
+Write-Host "Logs:            $env:APPDATA\celebratedesk\logs\"
 Write-Host ""
-Write-Host "Open the Drive folder now to see the smoke-test backup:"
-Write-Host "  explorer `"$backupFolder`""
+Write-Host "Now go to your Mac:"
+Write-Host "  1. Install CelebrateDesk on the Mac (download .dmg from the Releases page)"
+Write-Host "  2. Open it, go to Settings -> Sync to gym TVs -> turn on 'Auto-sync'"
+Write-Host "  3. Make a content edit -> ~60-90 seconds later this gym TV updates"
 Write-Host ""

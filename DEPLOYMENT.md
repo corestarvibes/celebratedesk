@@ -4,12 +4,12 @@ Everything you need to get the app onto the gym's mini PC(s) and keep it up
 to date remotely. Mac install instructions for your dev machine are in
 Part 8.
 
-> **Important:** each install (Mac, mini PC #1, mini PC #2, …) has its
-> **own** local SQLite DB and userData. The app does not sync content
-> across machines. To make content changes (MOTM, events, CSV imports)
-> on a specific gym TV, Remote-Desktop into that machine. The Mac
-> install is for testing changes / previewing new versions, not remote-
-> control of the gym TV.
+> **Content sync** is in v1.1.0+. The Mac is the writer; mini PCs are
+> read-only followers. Edit content on the Mac → it auto-pushes to a
+> Drive folder → mini PCs poll every minute and apply the latest
+> snapshot. See **Part 9 — Content sync** below for setup. (Code
+> updates, separately, still flow through GitHub Actions and
+> electron-updater on Windows; auto-update is manual on Mac.)
 
 ---
 
@@ -339,7 +339,102 @@ cert away — not worth it for the current setup.
 
 ---
 
-## Part 8 — Known gotchas
+## Part 9 — Content sync (Mac → mini PCs)
+
+The flow you actually want for content updates: open the app on your Mac,
+edit MOTM/events/attendance/photos, hit save → both gym TVs reflect the
+change in ~60–90 seconds. No driving, no Remote Desktop, no PowerShell.
+
+### How it works
+
+```
+Mac edit → 5s debounce → snapshot.zip + snapshot.json
+        → "CelebrateDesk Sync" folder in Google Drive
+        → Drive uploads to cloud (~30s)
+        → mini PCs poll every 60s
+        → on new snapshot: close app, restore, relaunch (~5s)
+```
+
+Total round-trip: **typically 60–90 seconds, worst case ~2 minutes.**
+
+### One-time setup
+
+**On the Mac:**
+1. Install CelebrateDesk (Part 7).
+2. Make sure Google Drive for Desktop is running and signed into the
+   same Google account as your gym TVs.
+3. Open CelebrateDesk → Settings → **Sync to gym TVs** → toggle
+   **Auto-sync to gym TVs on every save** to ON.
+4. The app will auto-detect the Drive folder
+   (`~/Library/CloudStorage/GoogleDrive-<email>/My Drive/CelebrateDesk Sync/`)
+   and create it if it's missing.
+
+**On each mini PC** (this is now bundled into the same `setup.ps1`):
+1. Run the one-paste bootstrap (see Part 6 — same command, no
+   change). The new version installs both the daily backup AND the
+   sync watcher.
+2. The watcher polls the Drive folder every 60 seconds. When a new
+   snapshot from the Mac arrives, it:
+   - gracefully closes CelebrateDesk
+   - backs up the current state to `.previous-userData.zip` (rollback)
+   - extracts the new snapshot
+   - relaunches the app
+
+### Day-to-day use
+
+You don't think about it. Open CelebrateDesk on your Mac, change
+something, click save anywhere in the app. ~90 seconds later both gym
+TVs reflect the change.
+
+The Settings → Sync section shows live status:
+- **Ready. Last push: 4:32 PM** — idle, waiting for next edit
+- **Edits detected — pushing in ~5 seconds…** — within the debounce window
+- **Pushing to Drive now…** — actively snapshotting
+- **Sync error: …** — Drive offline, folder missing, etc.
+
+There's also a **Sync now** button if you want to skip the 5-second
+debounce and force an immediate push.
+
+### Hard rules
+
+- **Only the Mac writes.** The toggle is hidden on Windows — followers
+  can't push, by design. If two machines pushed concurrently, the
+  later push would silently overwrite the earlier one.
+- **Each push is a full snapshot**, not a delta. That keeps the
+  follower side simple (extract + reload). Snapshots typically run
+  5–20 MB.
+- **Atomic writes.** The zip is written first, then the manifest
+  (`snapshot.json`) is renamed into place last. Followers only see
+  the new manifest after the zip is fully on disk + verified by SHA.
+- **Followers verify SHA256** before extracting. If the zip is
+  partially synced, the watcher backs off and retries on the next
+  minute's poll.
+
+### Restoring from rollback (mini PC blew up after a bad sync)
+
+The watcher always keeps the previous userData as
+`%APPDATA%\celebratedesk\.previous-userData.zip`. To roll back:
+
+```
+# Close the app first
+taskkill /IM CelebrateDesk.exe
+
+# Restore the rollback zip
+$prev = "$env:APPDATA\celebratedesk\.previous-userData.zip"
+Expand-Archive $prev -DestinationPath "$env:TEMP\celeb-rollback" -Force
+robocopy "$env:TEMP\celeb-rollback\celebratedesk" "$env:APPDATA\celebratedesk" /MIR
+
+# Stop the watcher temporarily so it doesn't re-apply the bad snapshot
+Disable-ScheduledTask -TaskName 'CelebrateDesk Sync Watcher'
+
+# Relaunch the app, then on your Mac fix the underlying issue and
+# push a fresh snapshot. Re-enable the watcher when ready.
+Enable-ScheduledTask -TaskName 'CelebrateDesk Sync Watcher'
+```
+
+---
+
+## Part 10 — Known gotchas
 
 - **First install shows SmartScreen warning.** Once only. Updates bypass.
 - **Windows may reboot overnight for updates.** Set Active Hours wide.

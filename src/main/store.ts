@@ -67,6 +67,9 @@ const defaults: AppSettings = {
   attendanceViewMonth: null,
   // ADD NEW SETTING HERE — editable QR codes displayed in QRCodesView.
   qrCodes: DEFAULT_QR_CODES,
+  // ADD NEW SETTING HERE — sync feature (Mac writer pushes to Drive).
+  syncEnabled: false,
+  syncFolderOverride: '',
   scraperConfig: {
     loginUrl: 'https://app.chalkitpro.com/login',
     membersUrl: 'https://app.chalkitpro.com/members',

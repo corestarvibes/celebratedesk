@@ -79,7 +79,21 @@ export interface AppSettings {
   attendanceViewMonth: string | null
   qrCodes: QRCodeEntry[]
   scraperConfig: ScraperConfig
+  // Mac-only writer flag. When true, every IPC mutation triggers a
+  // debounced snapshot push to the Drive sync folder.
+  syncEnabled: boolean
+  /** Optional override for the Drive sync folder path. Empty -> auto-detect. */
+  syncFolderOverride: string
 }
+
+// ───── Sync ─────
+
+export type SyncStatus =
+  | { kind: 'disabled' }
+  | { kind: 'idle'; folder: string; lastSnapshot: { timestamp: number; sha256: string } | null }
+  | { kind: 'pending' }
+  | { kind: 'syncing' }
+  | { kind: 'error'; message: string }
 
 export interface ScrapeResult {
   success: boolean

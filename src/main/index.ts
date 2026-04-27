@@ -62,6 +62,7 @@ import {
 } from './credentials'
 import { installUpdater } from './updater'
 import { notifySummary } from './notifications'
+import { getSyncStatus, initSync, notifyChange, setSyncEnabled, syncNow } from './sync'
 import { getAge, getDaysUntil, getNextOccurrence, getYearsCount, todayInTz } from '@utils/dateHelpers'
 import { parseCsv } from '@utils/csvParser'
 import { logger } from '@utils/logger'
@@ -125,8 +126,54 @@ function createWindow(): void {
   }
 }
 
+// Channels that mutate persistent state. After any of these resolves, the
+// sync layer notifies the debounced snapshot scheduler. Add to this set
+// when introducing new content-mutating channels (NOT view-state or
+// read-only channels).
+const MUTATING_CHANNELS = new Set([
+  'db:upsert',
+  'db:delete',
+  'db:clearAll',
+  'db:importCSV',
+  'settings:set',
+  'system:saveLogo',
+  'system:saveEventPhoto',
+  'motm:upsert',
+  'motm:delete',
+  'motm:setActive',
+  'motm:savePhoto',
+  'coaches:upsert',
+  'coaches:delete',
+  'coaches:reorder',
+  'attendance:bulkUpsert',
+  'attendance:clearMonth'
+])
+
 function registerIpc(): void {
   // ADD NEW IPC CHANNEL HERE — keep names in sync with src/preload/index.ts.
+  //
+  // Mutating channels (writes to the SQLite DB or saves a user-uploaded
+  // file under userData) auto-notify the sync layer so a debounced
+  // snapshot lands in Drive ~5 seconds after the last edit. The wrapper
+  // below installs once and is transparent to every handler.
+  const origHandle = ipcMain.handle.bind(ipcMain)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ipcMain.handle = ((channel: string, handler: (...args: any[]) => any) => {
+    if (!MUTATING_CHANNELS.has(channel)) return origHandle(channel, handler)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return origHandle(channel, async (...args: any[]) => {
+      const result = await handler(...args)
+      try {
+        notifyChange(channel)
+      } catch (err) {
+        // sync should never break the actual handler — log + continue
+        // eslint-disable-next-line no-console
+        console.warn('[sync] notifyChange threw:', err)
+      }
+      return result
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }) as any
 
   // --- db ---
   ipcMain.handle('db:getAll', (): CelebEventComputed[] => getAllEvents().map(toComputed))
@@ -353,6 +400,11 @@ function registerIpc(): void {
   ipcMain.handle('attendance:clearMonth', (_e, month: string): number =>
     clearAttendanceForMonth(month)
   )
+
+  // --- sync (Mac writer side) ---
+  ipcMain.handle('sync:syncNow', async () => syncNow())
+  ipcMain.handle('sync:getStatus', () => getSyncStatus())
+  ipcMain.handle('sync:setEnabled', (_e, enabled: boolean) => setSyncEnabled(enabled))
 }
 
 function summaryOnLaunch(): void {
@@ -438,6 +490,7 @@ app.whenReady().then(() => {
   createWindow()
   startSchedulers(() => mainWindow)
   installUpdater(() => mainWindow)
+  initSync(() => mainWindow)
   registerGlobalShortcuts()
 
   setTimeout(summaryOnLaunch, 2000)

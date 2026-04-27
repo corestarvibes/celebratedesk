@@ -9,7 +9,8 @@ import {
   coachesSection,
   eventsSection,
   motmSection,
-  qrCodesSection
+  qrCodesSection,
+  syncSection
 } from './settingsSections'
 
 let currentEl: HTMLElement | null = null
@@ -64,6 +65,9 @@ export async function openSettings(_initialSection?: string): Promise<void> {
 
   // --- Data source ---
   panel.appendChild(section('Data', dataSection(settings)))
+
+  // --- Sync to gym TVs (Mac writer; followers see explainer) ---
+  panel.appendChild(section('Sync to gym TVs', syncSection()))
 
   // --- Scraper config ---
   panel.appendChild(section('Member of the Month', motmSection()))
