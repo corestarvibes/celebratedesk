@@ -1,20 +1,26 @@
-# Build + publish a Windows release.
+# Build + publish a multi-platform release.
 #
-# Triggered by pushing a git tag like `v1.0.1`. Produces a signed-only-by-
-# GitHub installer at `dist-electron/celebratedesk-<version>-setup.exe` and
-# attaches it to a draft GitHub Release. electron-builder also publishes
-# the `latest.yml` manifest that `electron-updater` reads on the mini PC
-# to detect the new version.
+# Triggered by pushing a git tag like `v1.0.1`. Two parallel jobs:
+#   build-windows -> celebratedesk-<version>-setup.exe + latest.yml
+#   build-mac     -> celebratedesk-<version>.dmg     + latest-mac.yml
+# Both attach to the same GitHub Release; the OS-specific manifest tells
+# each running app which file to download.
 #
-# The mini PC polls GitHub Releases every 4 hours (see src/main/updater.ts),
-# downloads in the background, and installs the update the next time the
-# app quits. No manual intervention needed after this workflow succeeds.
+# Auto-update story:
+#   - Windows mini PCs: silent differential updates via electron-updater
+#     (no signing needed because Squirrel handles the install).
+#   - Mac (your dev machine): the update check + download still happens,
+#     but installing an unsigned update is blocked by Gatekeeper. So on
+#     Mac you'll get a "new version available" toast, and you can grab
+#     the DMG from the Releases page when you actually want to update.
+#     Buying a $99/yr Apple Developer cert would enable seamless Mac
+#     auto-updates if it ever matters; for now it's manual on Mac.
 #
-# Note: we don't code-sign (cert costs $300/yr for a gym TV — not worth it).
-# Windows SmartScreen shows a one-time warning on first install; after that
-# electron-updater's silent differential updates work fine without signing.
+# Neither platform is code-signed (cert costs aren't worth it for a gym
+# kiosk). One-time Gatekeeper / SmartScreen prompt on first install,
+# then the auto-update channel handles everything else on Windows.
 
-name: Release (Windows)
+name: Release
 
 on:
   push:
@@ -26,47 +32,54 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:
-      contents: write  # required to upload release assets
-
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
-      # Native modules (better-sqlite3, sharp) build against Electron's
-      # Node ABI. electron-builder's postinstall handles this, but we set
-      # PYTHON explicitly because node-gyp still looks for it on Windows.
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
         env:
-          # Disable husky / prepare scripts that might try to run git hooks
-          # in CI where .git metadata is shallow.
           HUSKY: '0'
-
-      - name: Typecheck + bundle
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
-
-      # electron-builder reads `publish: github` from electron-builder.yml
-      # and uses GH_TOKEN to create/update the draft release. The job runs
-      # on a tag push, so the release version matches the tag name.
-      - name: Build + publish installer
+      - run: npm run build
+      - run: npm test
+      - name: Build + publish Windows installer
         run: npm run build:win -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # electron-builder creates the release as a draft so you can edit
-      # release notes before going public. For a kiosk device that
-      # auto-updates, we want the release live immediately.
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+        env:
+          HUSKY: '0'
+      - run: npm run build
+      - run: npm test
+      # --universal builds a single DMG that runs on both Intel and Apple
+      # Silicon Macs. Slightly bigger than a per-arch build but covers any
+      # Mac the user might install on without us having to know in advance.
+      - name: Build + publish Mac DMG
+        run: npm run build:mac -- --universal --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  promote-release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Promote draft release to public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false
-        shell: bash

@@ -93,7 +93,11 @@ function createWindow(): void {
     autoHideMenuBar: true,
     alwaysOnTop,
     backgroundColor: '#0f172a',
-    ...(process.platform === 'linux' ? { icon } : {}),
+    // Set the runtime window icon on every platform. On Windows the .exe's
+    // embedded icon (build/icon.ico) covers the taskbar + shortcut, but
+    // setting it here ensures the title-bar icon also picks up the OTG
+    // brand mark right away, including in dev mode.
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

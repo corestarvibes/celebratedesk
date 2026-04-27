@@ -1,7 +1,15 @@
 # CelebrateDesk — Deployment & Update Runbook
 
-Everything you need to get the app onto the gym's mini PC and keep it up to
-date remotely.
+Everything you need to get the app onto the gym's mini PC(s) and keep it up
+to date remotely. Mac install instructions for your dev machine are in
+Part 8.
+
+> **Important:** each install (Mac, mini PC #1, mini PC #2, …) has its
+> **own** local SQLite DB and userData. The app does not sync content
+> across machines. To make content changes (MOTM, events, CSV imports)
+> on a specific gym TV, Remote-Desktop into that machine. The Mac
+> install is for testing changes / previewing new versions, not remote-
+> control of the gym TV.
 
 ---
 
@@ -307,7 +315,31 @@ weeklies the total footprint is well under 500 MB — Drive's free tier
 
 ---
 
-## Part 7 — Known gotchas
+## Part 7 — Installing on your Mac
+
+Same flow as the Windows install, just with the `.dmg`:
+
+1. Go to <https://github.com/corestarvibes/celebratedesk/releases/latest>
+2. Download `celebratedesk-<version>-universal.dmg`
+3. Open the DMG, drag CelebrateDesk into Applications
+4. **First launch:** macOS will block it ("can't be opened because Apple
+   cannot check it for malicious software"). Right-click the app icon
+   in Applications → **Open** → confirm. After that it launches normally.
+5. Set up your content the same way you would on the mini PC.
+
+**Mac auto-update note:** the app on the Mac will detect new releases
+and show a "new version available" toast, but **the auto-install path
+is blocked on unsigned macOS apps**. To update on your Mac, just grab
+the new DMG from the Releases page when you see the toast. (Mini PCs
+auto-install silently because Windows Squirrel doesn't have the same
+restriction.)
+
+If you ever want true Mac auto-update, it's a $99/year Apple Developer
+cert away — not worth it for the current setup.
+
+---
+
+## Part 8 — Known gotchas
 
 - **First install shows SmartScreen warning.** Once only. Updates bypass.
 - **Windows may reboot overnight for updates.** Set Active Hours wide.
