@@ -65,11 +65,14 @@ jobs:
           HUSKY: '0'
       - run: npm run build
       - run: npm test
-      # --universal builds a single DMG that runs on both Intel and Apple
-      # Silicon Macs. Slightly bigger than a per-arch build but covers any
-      # Mac the user might install on without us having to know in advance.
+      # macos-latest runners are Apple Silicon (arm64). We build arm64-only
+      # by default — sharp's per-arch native binaries break universal
+      # builds (the same .node file ends up in both x64 and arm64 trees,
+      # which @electron/universal refuses to merge). If an Intel Mac ever
+      # needs this, add a separate runner block with `runs-on: macos-13`
+      # (last Intel-default runner) and target x64.
       - name: Build + publish Mac DMG
-        run: npm run build:mac -- --universal --publish always
+        run: npm run build:mac -- --arm64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
