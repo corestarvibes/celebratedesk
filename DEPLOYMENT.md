@@ -320,7 +320,13 @@ weeklies the total footprint is well under 500 MB — Drive's free tier
 Same flow as the Windows install, just with the `.dmg`:
 
 1. Go to <https://github.com/corestarvibes/celebratedesk/releases/latest>
-2. Download `celebratedesk-<version>.dmg` (Apple Silicon — M1/M2/M3/M4 Macs)
+2. Pick the right DMG for your Mac:
+   - Apple Silicon (M1/M2/M3/M4): `celebratedesk-<version>-arm64.dmg`
+   - Intel (anything else): `celebratedesk-<version>.dmg` (the x64 build,
+     no arch suffix)
+
+   If unsure: click the Apple menu → About This Mac. "Chip" or "Processor"
+   field tells you which architecture.
 3. Open the DMG, drag CelebrateDesk into Applications
 4. **First launch:** macOS will block it ("can't be opened because Apple
    cannot check it for malicious software"). Right-click the app icon

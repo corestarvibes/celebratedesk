@@ -49,7 +49,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-mac:
+  build-mac-arm64:
     runs-on: macos-latest
     timeout-minutes: 30
     permissions:
@@ -65,19 +65,40 @@ jobs:
           HUSKY: '0'
       - run: npm run build
       - run: npm test
-      # macos-latest runners are Apple Silicon (arm64). We build arm64-only
-      # by default — sharp's per-arch native binaries break universal
-      # builds (the same .node file ends up in both x64 and arm64 trees,
-      # which @electron/universal refuses to merge). If an Intel Mac ever
-      # needs this, add a separate runner block with `runs-on: macos-13`
-      # (last Intel-default runner) and target x64.
-      - name: Build + publish Mac DMG
+      # Apple Silicon DMG. macos-latest runners are arm64, so npm naturally
+      # fetches the arm64 sharp binary. Universal builds fail because of
+      # sharp's per-arch native files conflicting in @electron/universal,
+      # so we ship per-arch DMGs in two separate jobs instead.
+      - name: Build + publish arm64 DMG
         run: npm run build:mac -- --arm64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-mac-x64:
+    runs-on: macos-13 # last Intel-default runner; needed for x64 sharp binary
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+        env:
+          HUSKY: '0'
+      - run: npm run build
+      - run: npm test
+      # Intel Mac DMG. macos-13 is x86_64 by default, so npm fetches the
+      # x64 sharp binary directly — no cross-compile gymnastics.
+      - name: Build + publish x64 DMG
+        run: npm run build:mac -- --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   promote-release:
-    needs: [build-windows, build-mac]
+    needs: [build-windows, build-mac-arm64, build-mac-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
