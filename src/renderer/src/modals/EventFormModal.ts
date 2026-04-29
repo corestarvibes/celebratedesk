@@ -72,10 +72,20 @@ export function openEventForm(existing: CelebEventComputed | null): void {
     'text',
     existing?.location ?? ''
   )
+  const timesInput = field(
+    'Times (optional, free-form — e.g. "6:00am, 7:30am, 9:00am")',
+    'text',
+    existing?.times ?? ''
+  )
   const eventUrlInput = field(
     'Event URL — rendered as QR code on Events view (optional)',
     'text',
     existing?.event_url ?? ''
+  )
+  const qrLabelInput = field(
+    'QR code label (optional, defaults to "Scan to Register" / "Scan to Learn More")',
+    'text',
+    existing?.qr_label ?? ''
   )
 
   form.appendChild(nameInput.wrap)
@@ -83,10 +93,12 @@ export function openEventForm(existing: CelebEventComputed | null): void {
   form.appendChild(dateInput.wrap)
   form.appendChild(endDateInput.wrap)
   form.appendChild(recurringWrap)
+  form.appendChild(timesInput.wrap)
   form.appendChild(locationInput.wrap)
   form.appendChild(notesInput.wrap)
   form.appendChild(photoBlock.wrap)
   form.appendChild(eventUrlInput.wrap)
+  form.appendChild(qrLabelInput.wrap)
 
   const err = document.createElement('div')
   err.className = 'text-xs text-rose-500 hidden'
@@ -142,6 +154,8 @@ export function openEventForm(existing: CelebEventComputed | null): void {
       end_date: (endDateInput.input as HTMLInputElement).value.trim() || undefined,
       location: (locationInput.input as HTMLInputElement).value.trim() || undefined,
       event_url: (eventUrlInput.input as HTMLInputElement).value.trim() || undefined,
+      times: (timesInput.input as HTMLInputElement).value.trim() || undefined,
+      qr_label: (qrLabelInput.input as HTMLInputElement).value.trim() || undefined,
       source: existing?.source ?? 'manual'
     }
     try {

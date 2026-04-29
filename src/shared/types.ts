@@ -22,6 +22,12 @@ export interface CelebEvent {
   location?: string
   /** URL rendered as a QR code on the Events view. */
   event_url?: string
+  // Added in DB migration 4 (v1.1.3).
+  /** Free-form times line shown under the date. e.g. "6:00am, 7:30am, 9:00am" */
+  times?: string
+  /** Override for the QR code label. e.g. "Buy Now", "Register Here", "Learn More".
+   *  When empty/null the Events view falls back to the auto label. */
+  qr_label?: string
 }
 
 /** Computed at read time — never stored. */

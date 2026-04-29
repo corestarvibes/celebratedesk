@@ -106,8 +106,14 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
         const pill = document.createElement('div')
         pill.className =
           'text-[15px] leading-tight px-2 py-1 rounded-full truncate min-w-0 font-semibold'
-        // Solid brand-blue bg + white text — works in both light and dark mode.
-        pill.style.backgroundColor = '#38bdf8'
+        // v1.1.3: color-code by event type so anniversaries stand out from
+        // birthdays at a glance. Brand blue = birthday (default), rose-500
+        // = anniversary, amber for events. Custom keeps the brand blue.
+        // Same pill shape so the visual rhythm is consistent.
+        let bg = '#38bdf8' // brand blue (birthday/default)
+        if (ev.type === 'anniversary') bg = '#ef4444' // rose-500
+        else if (ev.type === 'event') bg = '#f59e0b' // amber-500
+        pill.style.backgroundColor = bg
         pill.style.color = '#ffffff'
         pill.textContent = `${typeGlyph(ev.type)} ${ev.name}`
         pill.title = `${ev.name} — ${ev.type}`

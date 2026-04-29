@@ -258,21 +258,25 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   wrap.appendChild(accent)
 
   // ─── Right sidebar (35%) ──────────────────────────────────────────
+  // overflow-y-auto lets long About-the-event text scroll inside the
+  // sidebar instead of being chopped by a fade. minHeight 0 is required
+  // for the flex child to honor the scroll region.
   const right = document.createElement('div')
-  right.className = 'flex flex-col overflow-hidden'
+  right.className = 'flex flex-col overflow-y-auto scrollbar-none'
   right.style.flex = '1 1 0%'
   right.style.minWidth = '0'
+  right.style.minHeight = '0'
   right.style.backgroundColor = '#0f172a'
-  right.style.padding = '40px 32px'
+  right.style.padding = '48px 36px'
 
   // 1. Top badge — COMING UP · IN N DAYS / HAPPENING TODAY 🎉
   const badge = document.createElement('div')
   badge.style.fontFamily = "'Montserrat', sans-serif"
-  badge.style.fontSize = '13px'
+  badge.style.fontSize = '16px'
   badge.style.fontWeight = '600'
   badge.style.letterSpacing = '0.15em'
   badge.style.color = '#38bdf8'
-  badge.style.marginBottom = '20px'
+  badge.style.marginBottom = '24px'
   if (ev.daysUntil === 0) {
     badge.textContent = 'HAPPENING TODAY 🎉'
   } else if (ev.daysUntil === 1) {
@@ -285,11 +289,11 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   // 2. Event name — Bebas Neue, giant
   const name = document.createElement('div')
   name.className = 'font-display'
-  name.style.fontSize = 'clamp(48px, 4.8vw, 84px)'
+  name.style.fontSize = 'clamp(56px, 5.2vw, 96px)'
   name.style.lineHeight = '1'
   name.style.color = '#ffffff'
   name.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)'
-  name.style.marginBottom = '28px'
+  name.style.marginBottom = '32px'
   name.style.wordBreak = 'break-word'
   name.textContent = ev.name
   right.appendChild(name)
@@ -298,15 +302,23 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   const details = document.createElement('div')
   details.style.display = 'flex'
   details.style.flexDirection = 'column'
-  details.style.gap = '12px'
+  details.style.gap = '14px'
   details.style.fontFamily = "'Montserrat', sans-serif"
-  details.style.fontSize = '17px'
+  details.style.fontSize = '22px'
   details.style.fontWeight = '600'
   details.style.color = '#ffffff'
 
   const dateLine = document.createElement('div')
   dateLine.textContent = `📅  ${formatRange(ev.date, ev.end_date, timezone)}`
   details.appendChild(dateLine)
+
+  // Times line (v1.1.3) — appears under the date if the user provided one.
+  // Free-form so they can write "6:00am, 7:30am, 9:00am" or "9–11am" or whatever.
+  if (ev.times && ev.times.trim().length > 0) {
+    const timesLine = document.createElement('div')
+    timesLine.textContent = `🕒  ${ev.times.trim()}`
+    details.appendChild(timesLine)
+  }
 
   if (ev.location) {
     const locLine = document.createElement('div')
@@ -315,38 +327,33 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   }
   right.appendChild(details)
 
-  // 4. About block (if notes set)
+  // 4. About block (if notes set). Removed the 5-line clamp + fade in
+  // v1.1.3 — long descriptions were getting truncated. The sidebar now
+  // scrolls if content overflows, so the user can tune note length to
+  // fit comfortably without losing information.
   if (ev.notes) {
     const aboutWrap = document.createElement('div')
-    aboutWrap.style.marginTop = '24px'
-    aboutWrap.style.paddingTop = '20px'
+    aboutWrap.style.marginTop = '28px'
+    aboutWrap.style.paddingTop = '24px'
     aboutWrap.style.borderTop = '1px solid rgba(255,255,255,0.1)'
 
     const aboutLabel = document.createElement('div')
     aboutLabel.style.fontFamily = "'Montserrat', sans-serif"
-    aboutLabel.style.fontSize = '11px'
+    aboutLabel.style.fontSize = '14px'
     aboutLabel.style.fontWeight = '600'
     aboutLabel.style.letterSpacing = '0.15em'
     aboutLabel.style.color = '#38bdf8'
-    aboutLabel.style.marginBottom = '10px'
+    aboutLabel.style.marginBottom = '12px'
     aboutLabel.textContent = 'ABOUT THIS EVENT'
     aboutWrap.appendChild(aboutLabel)
 
     const notesText = document.createElement('div')
     notesText.style.fontFamily = "'Montserrat', sans-serif"
-    notesText.style.fontSize = '15px'
+    notesText.style.fontSize = '18px'
     notesText.style.fontWeight = '400'
     notesText.style.color = '#cbd5e1' // slate-300
-    notesText.style.lineHeight = '1.7'
-    notesText.style.display = '-webkit-box'
-    ;(notesText.style as unknown as Record<string, string>).webkitBoxOrient = 'vertical'
-    ;(notesText.style as unknown as Record<string, string>).webkitLineClamp = '5'
-    notesText.style.overflow = 'hidden'
-    // Bottom fade if the clamped text is truncated
-    notesText.style.maskImage =
-      'linear-gradient(180deg, #000 70%, rgba(0,0,0,0.15) 100%)'
-    ;(notesText.style as unknown as Record<string, string>).webkitMaskImage =
-      'linear-gradient(180deg, #000 70%, rgba(0,0,0,0.15) 100%)'
+    notesText.style.lineHeight = '1.6'
+    notesText.style.whiteSpace = 'pre-wrap' // honor user-entered line breaks
     notesText.textContent = ev.notes
     aboutWrap.appendChild(notesText)
 
@@ -356,6 +363,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   // 5. Spacer pushes QR to the bottom
   const spacer = document.createElement('div')
   spacer.style.flex = '1'
+  spacer.style.minHeight = '24px'
   right.appendChild(spacer)
 
   // 6. QR block (bottom)
@@ -364,19 +372,26 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     qrBlock.style.display = 'flex'
     qrBlock.style.flexDirection = 'column'
     qrBlock.style.alignItems = 'flex-start'
-    qrBlock.style.gap = '10px'
+    qrBlock.style.gap = '12px'
+    qrBlock.style.marginTop = '24px'
 
     const qrLabel = document.createElement('div')
     qrLabel.style.fontFamily = "'Montserrat', sans-serif"
-    qrLabel.style.fontSize = '11px'
+    qrLabel.style.fontSize = '14px'
     qrLabel.style.fontWeight = '600'
     qrLabel.style.letterSpacing = '0.15em'
     qrLabel.style.color = '#38bdf8'
-    // Label switches to "REGISTER" if URL contains sign-up/register; otherwise "LEARN MORE".
-    const wantRegister = /\b(register|signup|sign-up|dropin|dropIns|booking)\b/i.test(
-      ev.event_url
-    )
-    qrLabel.textContent = wantRegister ? 'SCAN TO REGISTER' : 'SCAN TO LEARN MORE'
+    // v1.1.3: prefer the user-provided qr_label override. Falls back to
+    // the URL-keyword auto-detect for events that haven't been edited
+    // since the field was added.
+    if (ev.qr_label && ev.qr_label.trim().length > 0) {
+      qrLabel.textContent = ev.qr_label.trim().toUpperCase()
+    } else {
+      const wantRegister = /\b(register|signup|sign-up|dropin|dropIns|booking)\b/i.test(
+        ev.event_url
+      )
+      qrLabel.textContent = wantRegister ? 'SCAN TO REGISTER' : 'SCAN TO LEARN MORE'
+    }
     qrBlock.appendChild(qrLabel)
 
     void renderQRCanvas(ev.event_url).then((c) => qrBlock.appendChild(c))
