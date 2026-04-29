@@ -321,9 +321,10 @@ Same flow as the Windows install, just with the `.dmg`:
 
 1. Go to <https://github.com/corestarvibes/celebratedesk/releases/latest>
 2. Pick the right DMG for your Mac:
-   - Apple Silicon (M1/M2/M3/M4): `celebratedesk-<version>-arm64.dmg`
-   - Intel (anything else): `celebratedesk-<version>.dmg` (the x64 build,
-     no arch suffix)
+   - Apple Silicon (M1/M2/M3/M4/M5+): `celebratedesk-<version>-arm64.dmg`
+   - Intel (anything else): `celebratedesk-<version>-x64.dmg` (or just
+     `celebratedesk-<version>.dmg` for releases prior to v1.1.2 where x64
+     was the un-suffixed default)
 
    If unsure: click the Apple menu → About This Mac. "Chip" or "Processor"
    field tells you which architecture.

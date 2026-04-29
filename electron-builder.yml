@@ -35,7 +35,12 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  # Per-arch suffix is required because we publish both arm64 and x64
+  # DMGs to the same GitHub release. Without ${arch}, the two builds
+  # would collide on filename. Apple Silicon -> "-arm64.dmg",
+  # Intel -> "-x64.dmg" (the historical default suffixes electron-builder
+  # uses when this template explicitly asks for arch).
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target: AppImage
   icon: build/icon.png
