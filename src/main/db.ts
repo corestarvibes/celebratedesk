@@ -315,11 +315,38 @@ export function getAllMotm(): MotmMember[] {
   return rows.map(rowToMotm)
 }
 
+/**
+ * Returns the MOTM to display right now.
+ *
+ * Priority order:
+ *   1. Member whose activeMonth matches the current calendar month (YYYY-MM
+ *      in system local timezone). Lets the user pre-stage future MOTMs:
+ *      e.g. on Apr 29 you set May's member to activeMonth=2026-05; that
+ *      member is invisible until May 1 when this query starts matching it.
+ *   2. Legacy fallback: any member with isActive=1. Covers older data
+ *      where the user toggled isActive via the ⭐ button without setting
+ *      activeMonth.
+ *
+ * If multiple members share the same activeMonth, the most recently
+ * updated one wins.
+ */
 export function getActiveMotm(): MotmMember | null {
-  const row = requireDb()
+  const d = requireDb()
+  const now = new Date()
+  const currentMonth =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  const matched = d
+    .prepare(
+      'SELECT * FROM members_of_month WHERE activeMonth = ? ORDER BY updatedAt DESC LIMIT 1'
+    )
+    .get(currentMonth) as Record<string, unknown> | undefined
+  if (matched) return rowToMotm(matched)
+
+  const legacy = d
     .prepare('SELECT * FROM members_of_month WHERE isActive = 1 LIMIT 1')
     .get() as Record<string, unknown> | undefined
-  return row ? rowToMotm(row) : null
+  return legacy ? rowToMotm(legacy) : null
 }
 
 export function upsertMotm(partial: Partial<MotmMember>): MotmMember {

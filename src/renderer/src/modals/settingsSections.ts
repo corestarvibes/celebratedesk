@@ -220,9 +220,19 @@ function openMotmForm(existing: MotmMember | null, onSaved: () => Promise<void>)
   const nameInput = labeledInput('Name*', existing?.name ?? '', 'text')
   const titleInput = labeledInput('Title (optional)', existing?.title ?? '', 'text')
   const sinceInput = labeledInput('Member since (YYYY-MM-DD)', existing?.startDate ?? '', 'date')
+  // "Active for month" — drives the banner header text on the MOTM view.
+  // Empty string means "not active". Picking a month here also implicitly
+  // activates the member (sets isActive=true on save). Format is YYYY-MM
+  // matching the <input type="month"> spec — same as activeMonth in the DB.
+  const activeMonthInput = labeledInput(
+    'Active for month (leave empty if not active)',
+    existing?.activeMonth ?? '',
+    'month'
+  )
   panel.appendChild(nameInput.wrap)
   panel.appendChild(titleInput.wrap)
   panel.appendChild(sinceInput.wrap)
+  panel.appendChild(activeMonthInput.wrap)
 
   // Photo
   let photoPath: string | undefined = existing?.photo_url
@@ -452,6 +462,11 @@ function openMotmForm(existing: MotmMember | null, onSaved: () => Promise<void>)
       toast('At least one Q&A pair is required', 'warning')
       return
     }
+    // "Active for month" picker is the source of truth for both fields:
+    // a value -> the member is active for that month; empty -> not active.
+    // The DB upsertMotm handler already deactivates other members when
+    // isActive=true is sent for a row (one active per month).
+    const newActiveMonth = (activeMonthInput.input as HTMLInputElement).value.trim()
     try {
       const result = await window.celebAPI.motm.upsert({
         id: existing?.id,
@@ -461,8 +476,8 @@ function openMotmForm(existing: MotmMember | null, onSaved: () => Promise<void>)
         photo_url: photoPath,
         nameStyle,
         qa: pairs,
-        isActive: existing?.isActive ?? false,
-        activeMonth: existing?.activeMonth
+        isActive: newActiveMonth.length > 0,
+        activeMonth: newActiveMonth || undefined
       })
       // eslint-disable-next-line no-console
       console.log('[motm-form] upsert result:', result)
@@ -745,9 +760,17 @@ export function attendanceSection(): HTMLElement {
   monthLabel.className = 'flex flex-col gap-1 text-sm'
   const ml = document.createElement('span')
   ml.className = 'opacity-70'
-  ml.textContent = 'Month'
+  // Renamed in v1.1.2 to disambiguate from the AttendanceView's display-
+  // month dropdown — this picker only controls which month CSV rows get
+  // labeled as on import. The view's display month is independent and
+  // lives in `attendanceViewMonth` setting.
+  ml.textContent = 'Import as month'
+  const sub = document.createElement('span')
+  sub.className = 'text-xs opacity-50'
+  sub.textContent = 'CSV rows will be labeled as this month. Defaults to previous month (ChalkItPro runs a month behind).'
   monthLabel.appendChild(ml)
   monthLabel.appendChild(monthInput)
+  monthLabel.appendChild(sub)
   body.appendChild(monthLabel)
 
   // Shared handler used by both the drop zone and the explicit button.

@@ -46,16 +46,17 @@ export function attendanceView(ctx: ViewContext): HTMLElement {
     const knownMonths = await window.celebAPI.attendance.getMonths()
     const thisMonth = currentMonthInTz(tz)
     const prevMonth = previousMonth(thisMonth)
-    // ChalkItPro attendance runs a month behind (current month isn't complete
-    // yet). Prefer the previous month — the latest whose data is finalized —
-    // unless the user has explicitly picked a different month in settings.
+    // ChalkItPro attendance is always a month behind — the current month
+    // isn't complete until it ends. Always prefer the previous month, even
+    // if rows for the current month happen to exist (would only be true if
+    // the user manually labeled placeholder data with the current month).
+    // The user can still override via the in-view dropdown, which writes
+    // `attendanceViewMonth`.
     const month =
       stored ??
       (knownMonths.includes(prevMonth)
         ? prevMonth
-        : knownMonths.includes(thisMonth)
-          ? thisMonth
-          : (knownMonths[0] ?? prevMonth))
+        : (knownMonths[0] ?? prevMonth))
     render(root, month, knownMonths, tz)
   })()
 
