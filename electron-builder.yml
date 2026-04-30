@@ -29,7 +29,17 @@ nsis:
 mac:
   target: dmg
   icon: build/icon.icns
-  hardenedRuntime: true
+  # macOS 26 (Sequoia+) enforces stricter Team-ID consistency across an
+  # app bundle's signed binaries. With hardenedRuntime + no real Apple
+  # Developer cert, electron-builder's ad-hoc signing produces mismatched
+  # Team IDs between the outer .app and the embedded Electron Framework,
+  # causing dyld to refuse loading the framework at launch:
+  #   "mapping process and mapped file have different Team IDs"
+  # Disabling hardenedRuntime + identity: null produces a uniform ad-hoc
+  # signature across the bundle. Trade-off: app can't be notarized, but
+  # we don't notarize anyway (no $99/yr cert).
+  hardenedRuntime: false
+  identity: null
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
