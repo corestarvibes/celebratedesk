@@ -115,8 +115,17 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
         else if (ev.type === 'event') bg = '#f59e0b' // amber-500
         pill.style.backgroundColor = bg
         pill.style.color = '#ffffff'
-        pill.textContent = `${typeGlyph(ev.type)} ${ev.name}`
-        pill.title = `${ev.name} — ${ev.type}`
+        // v1.1.5: append years count for anniversaries / age for birthdays.
+        // Keep it terse ("· 5y" / "· 32") so it fits in the pill width on
+        // the smallest cells. Same data is shown verbose in Today/Week.
+        let suffix = ''
+        if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number') {
+          suffix = ` · ${ev.yearsCount + 1}y`
+        } else if (ev.type === 'birthday' && typeof ev.age === 'number') {
+          suffix = ` · ${ev.age + 1}`
+        }
+        pill.textContent = `${typeGlyph(ev.type)} ${ev.name}${suffix}`
+        pill.title = `${ev.name} — ${ev.type}${suffix}`
         pills.appendChild(pill)
       }
       if (dayEvents.length > MAX_PILLS) {
