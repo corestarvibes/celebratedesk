@@ -8,7 +8,7 @@
 #   4. relaunches the app
 #
 # Lifecycle: registered as a Windows Task Scheduler entry that runs every
-# minute (see install-sync-watcher.ps1). Each invocation is short — checks
+# minute (see install-sync-watcher.ps1). Each invocation is short -- checks
 # the manifest, exits if not newer, only does real work when there's an
 # actual update.
 #
@@ -46,7 +46,7 @@ $zipPath = Join-Path $DriveFolder "snapshot.zip"
 $lastAppliedPath = Join-Path $AppDataFolder ".last-applied.json"
 
 if (-not (Test-Path $manifestPath)) {
-    # No snapshot yet — first-time setup, no Mac has pushed. Quiet exit.
+    # No snapshot yet -- first-time setup, no Mac has pushed. Quiet exit.
     exit 0
 }
 
@@ -70,13 +70,13 @@ if (Test-Path $lastAppliedPath) {
         $lastTs = [int64]$lastApplied.timestamp
     }
     catch {
-        # corrupt local state — treat as "never applied"
+        # corrupt local state -- treat as "never applied"
         $lastTs = 0
     }
 }
 
 if ([int64]$manifest.timestamp -le $lastTs) {
-    # Up to date, nothing to do. Don't even log — this fires every minute.
+    # Up to date, nothing to do. Don't even log -- this fires every minute.
     exit 0
 }
 
@@ -85,10 +85,10 @@ Write-Log "snapshot newer than last applied (manifest=$($manifest.timestamp), la
 # ---------------------------------------------------------------------------
 # Step 2: verify the zip actually exists and matches the manifest's hash
 # before we touch anything. A partially-synced Drive file is a real
-# failure mode — Drive may still be downloading.
+# failure mode -- Drive may still be downloading.
 
 if (-not (Test-Path $zipPath)) {
-    Write-Log "manifest exists but zip is missing — Drive likely still syncing" "WARN"
+    Write-Log "manifest exists but zip is missing -- Drive likely still syncing" "WARN"
     exit 0
 }
 
@@ -102,7 +102,7 @@ catch {
 
 $expectedHash = $manifest.sha256.ToLower()
 if ($actualHash -ne $expectedHash) {
-    Write-Log "hash mismatch (expected=$expectedHash, got=$actualHash) — Drive still syncing?" "WARN"
+    Write-Log "hash mismatch (expected=$expectedHash, got=$actualHash) -- Drive still syncing?" "WARN"
     exit 0
 }
 
@@ -111,7 +111,7 @@ Write-Log "zip verified, applying snapshot"
 # ---------------------------------------------------------------------------
 # Step 3: gracefully close the running app. taskkill without /F sends
 # WM_CLOSE which Electron treats as a normal quit. Fall back to /F only
-# after the timeout — we'd rather be patient than corrupt state.
+# after the timeout -- we'd rather be patient than corrupt state.
 
 $appName = Split-Path $AppExe -Leaf
 $running = Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($appName)) -ErrorAction SilentlyContinue
@@ -147,7 +147,7 @@ $rollbackInner = Join-Path $rollbackStaging "celebratedesk"
 
 & robocopy $AppDataFolder $rollbackInner /MIR /XD logs /XF .previous-userData.zip .last-applied.json /R:1 /W:1 /NFL /NDL /NP | Out-Null
 if ($LASTEXITCODE -ge 8) {
-    Write-Log "rollback robocopy failed (code $LASTEXITCODE) — proceeding anyway" "WARN"
+    Write-Log "rollback robocopy failed (code $LASTEXITCODE) -- proceeding anyway" "WARN"
 }
 else {
     try {
@@ -185,7 +185,7 @@ if (-not (Test-Path $snapshotInner)) {
 }
 
 # Mirror snapshot into AppDataFolder. /MIR will delete files in the
-# destination that aren't in the source — that's exactly what we want
+# destination that aren't in the source -- that's exactly what we want
 # (a Mac delete should propagate to the gym TV). But we preserve a few
 # follower-only files so /XF skips them.
 & robocopy $snapshotInner $AppDataFolder /MIR /XF .previous-userData.zip .last-applied.json /XD logs /R:1 /W:1 /NFL /NDL /NP | Out-Null
@@ -215,7 +215,7 @@ if (Test-Path $AppExe) {
     Start-Process -FilePath $AppExe -WorkingDirectory (Split-Path $AppExe)
 }
 else {
-    Write-Log "app exe not found at $AppExe — skipping relaunch (was the app uninstalled?)" "WARN"
+    Write-Log "app exe not found at $AppExe -- skipping relaunch (was the app uninstalled?)" "WARN"
 }
 
 Write-Log "snapshot applied successfully"
