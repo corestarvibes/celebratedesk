@@ -1,7 +1,11 @@
 // SVG name overlays composited onto a photo using sharp. Main-process only.
 // Three styles: vertical, diagonal, horizontal — see each builder below.
+//
+// Sharp is lazy-loaded inside generateNameOverlay so the module can be
+// imported on follower machines (gym TVs) where sharp's native binaries may
+// not load at startup. Followers display pre-rendered overlays from the Mac
+// editor and never call generateNameOverlay themselves.
 
-import sharp from 'sharp'
 import { existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 import type { OverlayParams } from '@shared/types'
@@ -101,6 +105,7 @@ export async function generateNameOverlay(params: OverlayParams): Promise<string
   const { photoPath, firstName, lastName, nameStyle, outputPath } = params
   ensureDir(outputPath)
 
+  const sharp = (await import('sharp')).default
   const image = sharp(photoPath).rotate() // honor EXIF orientation
   const meta = await image.metadata()
   const inW = meta.width ?? 1200

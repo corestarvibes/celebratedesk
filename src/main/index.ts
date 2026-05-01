@@ -467,11 +467,32 @@ app.whenReady().then(() => {
   // `celeb-local:///Users/foo%20bar/pic.png`. `url.pathname` gives the
   // already-decoded path; we hand it to `net.fetch` via `pathToFileURL` which
   // is allowed to touch disk from the main process.
+  //
+  // Cross-platform sync fallback: snapshots restored from another OS bring
+  // along DB rows with the SOURCE machine's absolute paths (e.g. Mac paths
+  // synced onto Windows). The image FILES are bundled into the snapshot
+  // under userData/<subfolder>/<filename>, so when the literal path doesn't
+  // resolve we look up by basename inside the known image subfolders.
   protocol.handle('celeb-local', async (request) => {
     try {
       const url = new URL(request.url)
       const filePath = decodeURIComponent(url.pathname)
-      return await net.fetch(pathToFileURL(filePath).toString())
+
+      if (existsSync(filePath)) {
+        return await net.fetch(pathToFileURL(filePath).toString())
+      }
+
+      const filename = basename(filePath)
+      const userData = app.getPath('userData')
+      const subfolders = ['motm-photos', 'motm-generated', 'event-photos', 'logo']
+      for (const sub of subfolders) {
+        const candidate = join(userData, sub, filename)
+        if (existsSync(candidate)) {
+          return await net.fetch(pathToFileURL(candidate).toString())
+        }
+      }
+
+      return new Response(null, { status: 404 })
     } catch (err) {
       logger.warn('[celeb-local] failed to serve', request.url, err)
       return new Response(null, { status: 404 })
