@@ -11,6 +11,7 @@ import { openSettings } from '../modals/SettingsModal'
 import { fileUrl } from '../utils/fileUrl'
 import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
+import { fitToViewport } from '../utils/fitToViewport'
 
 const QA_PER_SLIDE = 8 // 2 columns × 4 rows per slide
 
@@ -369,7 +370,8 @@ function renderNameOverlay(member: MotmMember): HTMLElement {
 }
 
 // Q&A group slide — up to QA_PER_SLIDE pairs on one slide, each showing the
-// question and answer together. Auto-scrolls slowly if content overflows.
+// question and answer together. Shrinks statically first; only falls back to
+// slow scrolling if the minimum readable scale still cannot fit the content.
 function renderQAGroup(
   member: MotmMember,
   pairs: MotmQA[],
@@ -426,17 +428,22 @@ function renderQAGroup(
   const scroller = document.createElement('div')
   // No explicit max width — use the full viewport for Q&A so each column gets
   // maximum reading room on a big TV.
-  scroller.className = 'flex-1 w-full overflow-y-auto min-h-0 scrollbar-none'
+  scroller.className = 'flex-1 w-full overflow-hidden min-h-0 scrollbar-none'
   scroller.style.scrollbarWidth = 'none'
 
   const content = document.createElement('div')
   // Two-column grid. Up to 8 pairs per slide → 4 per column. Large type sizes
   // below may cause the slide to overflow on smaller viewports; the one-way
   // auto-scroller kicks in to cycle through.
-  content.className = 'grid gap-x-16 gap-y-10'
+  content.className = 'grid'
   content.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
-  content.style.padding = '32px 64px'
+  content.style.gap =
+    'calc(40px * var(--fit-scale, 1)) calc(64px * var(--fit-scale, 1))'
+  content.style.padding =
+    'calc(32px * var(--fit-scale, 1)) calc(64px * var(--fit-scale, 1))'
   content.style.width = '100%'
+  content.style.setProperty('--qa-question-scale', 'max(0.8, var(--fit-scale, 1))')
+  content.style.setProperty('--qa-answer-scale', 'var(--fit-scale, 1)')
 
   pairs.forEach((pair) => {
     const block = document.createElement('div')
@@ -452,30 +459,33 @@ function renderQAGroup(
     // Sized for 50–55" TV legibility. Will likely overflow a single slide
     // when there are 4 pairs per column — the one-way auto-scroll handles it.
     const qLabel = document.createElement('div')
-    qLabel.className = 'font-bold uppercase tracking-[0.3em] mb-2'
+    qLabel.className = 'font-bold uppercase tracking-[0.3em]'
     qLabel.style.color = '#38bdf8'
-    qLabel.style.fontSize = '20px'
+    qLabel.style.fontSize = 'calc(20px * var(--qa-question-scale, 1))'
+    qLabel.style.marginBottom = 'calc(8px * var(--qa-question-scale, 1))'
     qLabel.textContent = 'Q —'
     block.appendChild(qLabel)
 
     const question = document.createElement('div')
-    question.className = 'text-white font-bold mb-4'
-    question.style.fontSize = '34px'
+    question.className = 'text-white font-bold'
+    question.style.fontSize = 'calc(34px * var(--qa-question-scale, 1))'
     question.style.lineHeight = '1.2'
+    question.style.marginBottom = 'calc(16px * var(--qa-question-scale, 1))'
     question.textContent = stripQAPrefix(pair.question)
     block.appendChild(question)
 
     const aLabel = document.createElement('div')
-    aLabel.className = 'font-bold uppercase tracking-[0.3em] mb-2'
+    aLabel.className = 'font-bold uppercase tracking-[0.3em]'
     aLabel.style.color = '#38bdf8'
-    aLabel.style.fontSize = '17px'
+    aLabel.style.fontSize = 'calc(17px * var(--qa-answer-scale, 1))'
+    aLabel.style.marginBottom = 'calc(8px * var(--qa-answer-scale, 1))'
     aLabel.textContent = 'A —'
     block.appendChild(aLabel)
 
     const answer = document.createElement('div')
     answer.className = 'text-slate-100'
-    answer.style.fontSize = '26px'
-    answer.style.lineHeight = '1.45'
+    answer.style.fontSize = 'calc(26px * var(--qa-answer-scale, 1))'
+    answer.style.lineHeight = 'calc(1.45 * var(--qa-answer-scale, 1))'
     answer.textContent = stripQAPrefix(pair.answer)
     block.appendChild(answer)
 
@@ -484,7 +494,21 @@ function renderQAGroup(
 
   scroller.appendChild(content)
   wrap.appendChild(scroller)
-  startAutoScroll(scroller)
+  let fallbackScrollStarted = false
+  fitToViewport(scroller, content, {
+    mode: 'css-var',
+    minScale: 0.72,
+    onScale: (_scale, hitFloor) => {
+      scroller.style.overflowY = hitFloor ? 'auto' : 'hidden'
+      if (!hitFloor) {
+        fallbackScrollStarted = false
+        scroller.scrollTop = 0
+      } else if (!fallbackScrollStarted) {
+        fallbackScrollStarted = true
+        startAutoScroll(scroller)
+      }
+    }
+  })
 
   // (Bottom watermark removed — member name is now in the top banner.)
 
