@@ -11,6 +11,7 @@ import { fileUrl } from '../utils/fileUrl'
 import { openEventForm } from '../modals/EventFormModal'
 import { celebrateIfNewDay } from '../components/ConfettiOverlay'
 import { getState } from '../state'
+import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
 // Only include types users would think of as "events" — not birthdays/anniversaries.
 const EVENT_TYPES = new Set<CelebEventComputed['type']>(['event', 'custom'])
@@ -198,7 +199,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     // Huge type watermark, very low opacity, for subtle texture.
     const watermark = document.createElement('div')
     watermark.className = 'absolute inset-0 flex items-center justify-center font-display'
-    watermark.style.fontSize = '20vw'
+    watermark.style.fontSize = 'clamp(96px, 20vw, 360px)'
     watermark.style.lineHeight = '1'
     watermark.style.color = '#ffffff'
     watermark.style.opacity = '0.05'
@@ -258,16 +259,23 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   wrap.appendChild(accent)
 
   // ─── Right sidebar (35%) ──────────────────────────────────────────
-  // overflow-y-auto lets long About-the-event text scroll inside the
-  // sidebar instead of being chopped by a fade. minHeight 0 is required
-  // for the flex child to honor the scroll region.
+  // Static TV sidebar: the inner content scales down to fit instead of
+  // relying on scroll affordances.
   const right = document.createElement('div')
-  right.className = 'flex flex-col overflow-y-auto scrollbar-none'
+  right.className = 'overflow-hidden scrollbar-none'
   right.style.flex = '1 1 0%'
   right.style.minWidth = '0'
   right.style.minHeight = '0'
+  right.style.position = 'relative'
   right.style.backgroundColor = '#0f172a'
-  right.style.padding = '48px 36px'
+
+  const rightContent = document.createElement('div')
+  rightContent.style.display = 'flex'
+  rightContent.style.flexDirection = 'column'
+  rightContent.style.width = '100%'
+  rightContent.style.minHeight = '100%'
+  rightContent.style.padding = '48px 36px'
+  let rightFit: FitToViewportController | null = null
 
   // 1. Top badge — COMING UP · IN N DAYS / HAPPENING TODAY 🎉
   const badge = document.createElement('div')
@@ -284,7 +292,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   } else {
     badge.textContent = `COMING UP · IN ${ev.daysUntil} DAYS`
   }
-  right.appendChild(badge)
+  rightContent.appendChild(badge)
 
   // 2. Event name — Bebas Neue, giant
   const name = document.createElement('div')
@@ -296,7 +304,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   name.style.marginBottom = '32px'
   name.style.wordBreak = 'break-word'
   name.textContent = ev.name
-  right.appendChild(name)
+  rightContent.appendChild(name)
 
   // 3. Details block — icons + data, skip empty fields
   const details = document.createElement('div')
@@ -325,12 +333,10 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     locLine.textContent = `📍  ${ev.location}`
     details.appendChild(locLine)
   }
-  right.appendChild(details)
+  rightContent.appendChild(details)
 
-  // 4. About block (if notes set). Removed the 5-line clamp + fade in
-  // v1.1.3 — long descriptions were getting truncated. The sidebar now
-  // scrolls if content overflows, so the user can tune note length to
-  // fit comfortably without losing information.
+  // 4. About block (if notes set). v1.1.3 originally allowed scrolling here.
+  // The TV view now scales the sidebar content as one static composition.
   if (ev.notes) {
     const aboutWrap = document.createElement('div')
     aboutWrap.style.marginTop = '28px'
@@ -357,14 +363,14 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     notesText.textContent = ev.notes
     aboutWrap.appendChild(notesText)
 
-    right.appendChild(aboutWrap)
+    rightContent.appendChild(aboutWrap)
   }
 
   // 5. Spacer pushes QR to the bottom
   const spacer = document.createElement('div')
   spacer.style.flex = '1'
   spacer.style.minHeight = '24px'
-  right.appendChild(spacer)
+  rightContent.appendChild(spacer)
 
   // 6. QR block (bottom)
   if (ev.event_url) {
@@ -394,11 +400,16 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     }
     qrBlock.appendChild(qrLabel)
 
-    void renderQRCanvas(ev.event_url).then((c) => qrBlock.appendChild(c))
+    void renderQRCanvas(ev.event_url).then((c) => {
+      qrBlock.appendChild(c)
+      rightFit?.fit()
+    })
 
-    right.appendChild(qrBlock)
+    rightContent.appendChild(qrBlock)
   }
 
+  right.appendChild(rightContent)
+  rightFit = fitToViewport(right, rightContent, { mode: 'transform', minScale: 0.68 })
   wrap.appendChild(right)
   return wrap
 }
