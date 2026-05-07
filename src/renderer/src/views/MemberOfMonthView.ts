@@ -505,6 +505,12 @@ function renderQAGroup(
         scroller.scrollTop = 0
       } else if (!fallbackScrollStarted) {
         fallbackScrollStarted = true
+        // eslint-disable-next-line no-console
+        console.log('[motm-view] Q&A fit floor hit; starting scroll fallback', {
+          scrollHeight: scroller.scrollHeight,
+          clientHeight: scroller.clientHeight,
+          contentScrollHeight: content.scrollHeight
+        })
         startAutoScroll(scroller)
       }
     }

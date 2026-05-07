@@ -106,6 +106,18 @@ export function fitToViewport(
       const scale = floorFits ? lo : minScale
       applyScale(scale)
       const hitFloor = scale <= minScale + 0.002 && overflows(scale)
+      if (hitFloor) {
+        // eslint-disable-next-line no-console
+        console.log('[fit-to-viewport] floor hit', {
+          mode: options.mode,
+          scale,
+          minScale,
+          containerHeight: container.clientHeight,
+          containerWidth: container.clientWidth,
+          targetScrollHeight: target.scrollHeight,
+          targetScrollWidth: target.scrollWidth
+        })
+      }
       options.onScale?.(scale, hitFloor)
     })
   }
