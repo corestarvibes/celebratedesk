@@ -94,16 +94,19 @@ export function fitToViewport(
 
       let lo = minScale
       let hi = 1
+      applyScale(lo)
+      const floorFits = !overflows(lo)
       for (let i = 0; i < 12; i++) {
         const mid = (lo + hi) / 2
         applyScale(mid)
-        if (overflows(mid)) lo = mid
-        else hi = mid
+        if (overflows(mid)) hi = mid
+        else lo = mid
       }
 
-      applyScale(hi)
-      const hitFloor = hi <= minScale + 0.002 && overflows(hi)
-      options.onScale?.(hi, hitFloor)
+      const scale = floorFits ? lo : minScale
+      applyScale(scale)
+      const hitFloor = scale <= minScale + 0.002 && overflows(scale)
+      options.onScale?.(scale, hitFloor)
     })
   }
 
