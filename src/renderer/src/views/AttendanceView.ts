@@ -1,6 +1,7 @@
 import type { AttendanceRow } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
 import { currentMonthInTz, previousMonth } from '@utils/coachRotation'
+import { fitToViewport } from '../utils/fitToViewport'
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number) as [number, number]
@@ -147,18 +148,33 @@ function renderColumn(
 
   // When the tier gets crowded, split the list into 2 or 3 sub-columns to
   // keep font sizes readable and avoid any scrolling. Each row stays intact.
-  const subColumns = rows.length > 30 ? 3 : rows.length > 20 ? 2 : 1
+  const subColumns =
+    tone === 'brand'
+      ? rows.length > 18
+        ? 3
+        : rows.length > 5
+          ? 2
+          : 1
+      : rows.length > 30
+        ? 3
+        : rows.length > 20
+          ? 2
+          : 1
 
   const list = document.createElement('div')
-  list.className = 'flex-1 min-h-0 flex gap-4 w-full overflow-hidden'
+  list.className = 'flex-1 min-h-0 w-full overflow-hidden'
+
+  const listContent = document.createElement('div')
+  listContent.className = 'flex w-full'
   // Baseline font size reflects total row count (curve defined in fontSizeFor).
-  list.style.fontSize = fontSizeFor(rows.length)
+  listContent.style.fontSize = `calc(${fontSizeFor(rows.length)} * var(--fit-scale, 1))`
+  listContent.style.gap = 'calc(16px * var(--fit-scale, 1))'
 
   if (rows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'opacity-60 text-center py-8 flex-1'
     empty.textContent = 'No one in this tier yet.'
-    list.appendChild(empty)
+    listContent.appendChild(empty)
   } else {
     // Split the rows across `subColumns` columns, preserving the overall rank.
     const perCol = Math.ceil(rows.length / subColumns)
@@ -170,8 +186,12 @@ function renderColumn(
         const globalIdx = c * perCol + iInChunk
         const row = document.createElement('div')
         row.className =
-          'grid items-baseline gap-3 py-1.5 px-2 border-b border-white/5 last:border-0 text-white'
-        row.style.gridTemplateColumns = 'minmax(2.25rem, auto) 1fr auto'
+          'grid items-baseline border-b border-white/5 last:border-0 text-white'
+        row.style.gap = 'calc(12px * var(--fit-scale, 1))'
+        row.style.padding =
+          'calc(6px * var(--fit-scale, 1)) calc(8px * var(--fit-scale, 1))'
+        row.style.gridTemplateColumns =
+          'minmax(calc(2.25rem * var(--fit-scale, 1)), auto) 1fr auto'
         if (globalIdx === 0 && tone === 'brand') {
           // Top Committed Club member gets a subtle accent highlight.
           row.style.background =
@@ -191,15 +211,19 @@ function renderColumn(
 
         const badge = document.createElement('span')
         badge.className =
-          'font-bold px-3 py-0.5 rounded-full bg-white/15 text-white tabular-nums'
+          'font-bold rounded-full bg-white/15 text-white tabular-nums'
+        badge.style.padding =
+          'calc(2px * var(--fit-scale, 1)) calc(12px * var(--fit-scale, 1))'
         badge.textContent = String(r.count)
         row.appendChild(badge)
 
         subCol.appendChild(row)
       })
-      list.appendChild(subCol)
+      listContent.appendChild(subCol)
     }
   }
+  list.appendChild(listContent)
   col.appendChild(list)
+  fitToViewport(list, listContent, { mode: 'css-var', minScale: 0.78 })
   return col
 }
