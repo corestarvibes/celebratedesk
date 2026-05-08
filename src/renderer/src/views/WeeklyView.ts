@@ -58,7 +58,7 @@ export function weeklyView(ctx: ViewContext): HTMLElement {
     } else {
       const list = document.createElement('div')
       list.className = 'flex flex-col gap-2 min-w-0 overflow-hidden'
-      for (const ev of dayEvents) list.appendChild(eventCardTight(ev))
+      for (const ev of dayEvents) list.appendChild(eventCardTight(ev, timezone, key))
       col.appendChild(list)
     }
     grid.appendChild(col)

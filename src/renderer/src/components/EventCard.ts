@@ -1,6 +1,7 @@
 import type { CelebEventComputed } from '@shared/types'
 import { formatDisplayDate } from '@utils/dateHelpers'
 import { openEventForm } from '../modals/EventFormModal'
+import { milestoneVerboseLabel } from '../utils/eventMilestones'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -41,7 +42,11 @@ export function typeGlyph(type: CelebEventComputed['type']): string {
  * Name wraps to up to 3 lines; "Today" pill sits BELOW the name row so it never
  * clashes.
  */
-export function eventCardTight(ev: CelebEventComputed): HTMLElement {
+export function eventCardTight(
+  ev: CelebEventComputed,
+  timezone: string,
+  occurrenceDate = ev.nextOccurrence
+): HTMLElement {
   const card = document.createElement('div')
   card.className =
     'surface p-3 flex flex-col gap-2 cursor-pointer hover:brightness-95 overflow-hidden min-w-0'
@@ -74,15 +79,11 @@ export function eventCardTight(ev: CelebEventComputed): HTMLElement {
   name.textContent = `${typeGlyph(ev.type)} ${ev.name}`
   body.appendChild(name)
 
-  if (ev.type === 'birthday' && typeof ev.age === 'number') {
+  const milestone = milestoneVerboseLabel(ev, occurrenceDate, timezone)
+  if (milestone) {
     const sub = document.createElement('div')
     sub.className = 'text-[16px] opacity-70 mt-1'
-    sub.textContent = `turning ${ev.age + 1}`
-    body.appendChild(sub)
-  } else if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number') {
-    const sub = document.createElement('div')
-    sub.className = 'text-[16px] opacity-70 mt-1'
-    sub.textContent = `${ev.yearsCount + 1} years`
+    sub.textContent = milestone
     body.appendChild(sub)
   }
 
@@ -103,7 +104,7 @@ export function eventCardTight(ev: CelebEventComputed): HTMLElement {
 export function eventCard(
   ev: CelebEventComputed,
   timezone: string,
-  opts: { compact?: boolean; clickable?: boolean } = {}
+  opts: { compact?: boolean; clickable?: boolean; occurrenceDate?: string } = {}
 ): HTMLElement {
   const card = document.createElement('div')
   card.className = `surface p-5 flex gap-5 items-center ${opts.clickable === false ? '' : 'cursor-pointer hover:brightness-95'}`
@@ -145,10 +146,10 @@ export function eventCard(
 
   const row2 = document.createElement('div')
   row2.className = 'text-[18px] opacity-70 mt-1'
-  let subtitle = formatDisplayDate(ev.nextOccurrence, timezone)
-  if (ev.type === 'birthday' && typeof ev.age === 'number') subtitle += ` · turning ${ev.age + 1}`
-  if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number')
-    subtitle += ` · ${ev.yearsCount + 1} years`
+  const occurrenceDate = opts.occurrenceDate ?? ev.nextOccurrence
+  let subtitle = formatDisplayDate(occurrenceDate, timezone)
+  const milestone = milestoneVerboseLabel(ev, occurrenceDate, timezone)
+  if (milestone) subtitle += ` · ${milestone}`
   row2.textContent = subtitle
 
   body.appendChild(row1)

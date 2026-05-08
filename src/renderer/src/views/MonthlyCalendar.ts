@@ -4,6 +4,7 @@ import type { CelebEventComputed } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
 import { handleFeb29, todayInTz } from '@utils/dateHelpers'
 import { eventCard, typeGlyph } from '../components/EventCard'
+import { milestoneShortLabel } from '../utils/eventMilestones'
 
 let monthCursor: Date = new Date()
 
@@ -124,12 +125,8 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
         // v1.1.5: append years count for anniversaries / age for birthdays.
         // Keep it terse ("· 5y" / "· 32") so it fits in the pill width on
         // the smallest cells. Same data is shown verbose in Today/Week.
-        let suffix = ''
-        if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number') {
-          suffix = ` · ${ev.yearsCount + 1}y`
-        } else if (ev.type === 'birthday' && typeof ev.age === 'number') {
-          suffix = ` · ${ev.age + 1}`
-        }
+        const milestone = milestoneShortLabel(ev, key)
+        const suffix = milestone ? ` · ${milestone}` : ''
         pill.textContent = `${typeGlyph(ev.type)} ${ev.name}${suffix}`
         pill.title = `${ev.name} — ${ev.type}${suffix}`
         pills.appendChild(pill)
@@ -143,7 +140,7 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
       }
       cell.appendChild(pills)
 
-      cell.addEventListener('click', () => showDayPopover(cell, dayEvents, timezone))
+      cell.addEventListener('click', () => showDayPopover(cell, dayEvents, timezone, key))
     }
     grid.appendChild(cell)
   }
@@ -154,7 +151,8 @@ export function monthlyCalendar(ctx: ViewContext): HTMLElement {
 function showDayPopover(
   anchor: HTMLElement,
   evs: CelebEventComputed[],
-  tz: string
+  tz: string,
+  occurrenceDate: string
 ): void {
   document.querySelectorAll('.day-popover').forEach((n) => n.remove())
   const pop = document.createElement('div')
@@ -165,7 +163,7 @@ function showDayPopover(
   pop.style.top = `${rect.bottom + 4}px`
   pop.style.left = `${rect.left}px`
   for (const ev of evs) {
-    pop.appendChild(eventCard(ev, tz, { compact: true }))
+    pop.appendChild(eventCard(ev, tz, { compact: true, occurrenceDate }))
   }
   const close = document.createElement('button')
   close.className = 'text-xs opacity-60 mt-1 self-end'

@@ -6,6 +6,7 @@ import { typeGlyph } from '../components/EventCard'
 import { eventCard } from '../components/EventCard'
 import { openEventForm } from '../modals/EventFormModal'
 import { fitToViewport } from '../utils/fitToViewport'
+import { milestoneVerboseLabel } from '../utils/eventMilestones'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -63,11 +64,8 @@ function todayHeroCard(ev: CelebEventComputed, timezone: string): HTMLElement {
   card.appendChild(badge)
 
   let subtitleText = formatDisplayDate(ev.nextOccurrence, timezone)
-  if (ev.type === 'birthday' && typeof ev.age === 'number') {
-    subtitleText += ` · turning ${ev.age + 1}`
-  } else if (ev.type === 'anniversary' && typeof ev.yearsCount === 'number') {
-    subtitleText += ` · ${ev.yearsCount + 1} years`
-  }
+  const milestone = milestoneVerboseLabel(ev, ev.nextOccurrence, timezone)
+  if (milestone) subtitleText += ` · ${milestone}`
   const sub = document.createElement('div')
   sub.className = 'opacity-75'
   sub.style.fontSize = 'calc(26px * var(--fit-scale, 1))'
