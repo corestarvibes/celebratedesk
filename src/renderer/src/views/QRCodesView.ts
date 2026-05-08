@@ -3,6 +3,16 @@ import type { QRCodeEntry } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
 
 const QR_PX = 380
+const DROP_IN_QR = {
+  id: 'qr-drop-in',
+  icon: '🥊',
+  label: 'Drop-In',
+  url: 'https://app.chalkitpro.com/dropIns/626/3886/x',
+  includeInSlideshow: true,
+  description: 'First time? Scan to sign up for a drop-in class.'
+}
+
+type QRCardEntry = QRCodeEntry & { description?: string }
 
 async function renderQRCanvas(url: string): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas')
@@ -63,14 +73,8 @@ export function qrCodesView(_ctx: ViewContext): HTMLElement {
 
   void window.celebAPI.settings.get('qrCodes').then(async (raw) => {
     const codes = Array.isArray(raw) ? (raw as QRCodeEntry[]) : []
-    if (codes.length === 0) {
-      const empty = document.createElement('div')
-      empty.className = 'flex-1 flex items-center justify-center opacity-70'
-      empty.textContent = 'Add QR codes in Settings →'
-      root.appendChild(empty)
-      return
-    }
-    for (const entry of codes) {
+    const entries: QRCardEntry[] = [...codes, DROP_IN_QR]
+    for (const entry of entries) {
       grid.appendChild(await renderCard(entry))
     }
   })
@@ -78,7 +82,7 @@ export function qrCodesView(_ctx: ViewContext): HTMLElement {
   return root
 }
 
-async function renderCard(entry: QRCodeEntry): Promise<HTMLElement> {
+async function renderCard(entry: QRCardEntry): Promise<HTMLElement> {
   const card = document.createElement('div')
   // Explicit flex-column layout per spec — no absolute positioning anywhere.
   card.style.display = 'flex'
@@ -118,7 +122,7 @@ async function renderCard(entry: QRCodeEntry): Promise<HTMLElement> {
   label.textContent = entry.label || '(no label)'
   card.appendChild(label)
 
-  // 4. URL (keep small — display-wall viewers aren't reading full URLs)
+  // 4. Supporting text (keep small — display-wall viewers aren't reading full URLs)
   const urlEl = document.createElement('div')
   urlEl.style.fontSize = '12px'
   urlEl.style.color = 'rgb(148, 163, 184)' // slate-400
@@ -128,7 +132,7 @@ async function renderCard(entry: QRCodeEntry): Promise<HTMLElement> {
   urlEl.style.textOverflow = 'ellipsis'
   urlEl.style.whiteSpace = 'nowrap'
   urlEl.style.flexShrink = '0'
-  urlEl.textContent = entry.url
+  urlEl.textContent = entry.description ?? entry.url
   urlEl.title = entry.url
   card.appendChild(urlEl)
 
