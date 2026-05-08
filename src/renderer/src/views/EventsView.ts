@@ -1,7 +1,6 @@
-// High-end digital-signage Events view. Split layout: photo (or animated
-// gradient) on the left with overlays, dark sidebar on the right with event
-// details + optional QR. Cycles one event per slide, MOTM-style, with the
-// advance hook wired into the main slideshow.
+// High-end digital-signage Events view. Split layout: roomy event details
+// with optional QR plus a shirt/design image panel. Cycles one event per
+// slide, MOTM-style, with the advance hook wired into the main slideshow.
 
 import QRCode from 'qrcode'
 import type { CelebEventComputed } from '@shared/types'
@@ -11,11 +10,11 @@ import { fileUrl } from '../utils/fileUrl'
 import { openEventForm } from '../modals/EventFormModal'
 import { celebrateIfNewDay } from '../components/ConfettiOverlay'
 import { getState } from '../state'
-import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
 // Only include types users would think of as "events" — not birthdays/anniversaries.
 const EVENT_TYPES = new Set<CelebEventComputed['type']>(['event', 'custom'])
 const HORIZON_DAYS = 180
+const DEFAULT_MARK = new URL('../../../../resources/icon.png', import.meta.url).href
 
 let currentRoot: HTMLElement | null = null
 let cached: CelebEventComputed[] = []
@@ -160,15 +159,63 @@ function typeWatermark(type: CelebEventComputed['type']): string {
   return (type ?? 'EVENT').toUpperCase()
 }
 
+function startLoopingAutoScroll(container: HTMLElement): () => void {
+  let frame = 0
+  let stopped = false
+
+  const stop = (): void => {
+    stopped = true
+    cancelAnimationFrame(frame)
+  }
+
+  frame = requestAnimationFrame(() => {
+    const overflow = container.scrollHeight - container.clientHeight
+    if (overflow <= 4) {
+      container.scrollTop = 0
+      return
+    }
+
+    const TOP_PAUSE_MS = 3000
+    const DOWN_MS = 30000
+    const BOTTOM_PAUSE_MS = 3000
+    const UP_MS = 3000
+    const LOOP_MS = TOP_PAUSE_MS + DOWN_MS + BOTTOM_PAUSE_MS + UP_MS
+    const startedAt = performance.now()
+
+    const step = (now: number): void => {
+      if (stopped || !container.isConnected) return
+      const currentOverflow = Math.max(0, container.scrollHeight - container.clientHeight)
+      const t = (now - startedAt) % LOOP_MS
+
+      if (t < TOP_PAUSE_MS) {
+        container.scrollTop = 0
+      } else if (t < TOP_PAUSE_MS + DOWN_MS) {
+        const progress = (t - TOP_PAUSE_MS) / DOWN_MS
+        container.scrollTop = currentOverflow * progress
+      } else if (t < TOP_PAUSE_MS + DOWN_MS + BOTTOM_PAUSE_MS) {
+        container.scrollTop = currentOverflow
+      } else {
+        const progress = (t - TOP_PAUSE_MS - DOWN_MS - BOTTOM_PAUSE_MS) / UP_MS
+        container.scrollTop = currentOverflow * (1 - progress)
+      }
+
+      frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+  })
+
+  return stop
+}
+
 function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElement {
   const wrap = document.createElement('div')
   wrap.className = 'flex-1 min-h-0 flex overflow-hidden relative events-fade-in'
 
-  // ─── Left side — photo or gradient (65%) ──────────────────────────
-  const left = document.createElement('div')
-  left.className = 'relative overflow-hidden'
-  left.style.flex = '0 0 65%'
-  left.style.minWidth = '0'
+  // ─── Shirt/design panel — event image or logo placeholder (30%) ───
+  const visual = document.createElement('div')
+  visual.className = 'relative overflow-hidden'
+  visual.style.flex = '0 0 30%'
+  visual.style.minWidth = '0'
 
   if (ev.photo_url) {
     const src = fileUrl(ev.photo_url)
@@ -183,7 +230,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     backdrop.style.filter = 'blur(30px) brightness(0.45) saturate(1.1)'
     backdrop.style.transform = 'scale(1.1)' // hide blur-edge bleeding
     backdrop.setAttribute('aria-hidden', 'true')
-    left.appendChild(backdrop)
+    visual.appendChild(backdrop)
 
     // Foreground — the actual image, `object-contain` so nothing gets
     // cropped. The blurred backdrop picks up any remaining space.
@@ -191,10 +238,10 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     img.src = src
     img.alt = ev.name
     img.className = 'absolute inset-0 w-full h-full object-contain'
-    left.appendChild(img)
+    visual.appendChild(img)
   } else {
     // Deep animated gradient fallback.
-    left.classList.add('events-gradient-bg')
+    visual.classList.add('events-gradient-bg')
 
     // Huge type watermark, very low opacity, for subtle texture.
     const watermark = document.createElement('div')
@@ -206,7 +253,21 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     watermark.style.whiteSpace = 'nowrap'
     watermark.style.pointerEvents = 'none'
     watermark.textContent = typeWatermark(ev.type)
-    left.appendChild(watermark)
+    visual.appendChild(watermark)
+
+    const placeholder = document.createElement('img')
+    const logoPath = getState().settings?.logoPath
+    placeholder.src = logoPath ? fileUrl(logoPath) : DEFAULT_MARK
+    placeholder.alt = ''
+    placeholder.className = 'brand-logo absolute object-contain'
+    placeholder.style.left = '50%'
+    placeholder.style.top = '50%'
+    placeholder.style.width = '56%'
+    placeholder.style.maxHeight = '42%'
+    placeholder.style.transform = 'translate(-50%, -50%)'
+    placeholder.style.opacity = '0.82'
+    placeholder.setAttribute('aria-hidden', 'true')
+    visual.appendChild(placeholder)
   }
 
   // Logo top-left (if workspace logo is set)
@@ -220,7 +281,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     logoImg.style.height = '40px'
     logoImg.style.width = 'auto'
     logoImg.style.opacity = '0.7'
-    left.appendChild(logoImg)
+    visual.appendChild(logoImg)
   }
 
   // Dot indicators bottom-center — only if multiple events queued.
@@ -245,37 +306,25 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
       }
       dots.appendChild(dot)
     }
-    left.appendChild(dots)
+    visual.appendChild(dots)
   }
 
-  wrap.appendChild(left)
+  // ─── Details panel (70%) ──────────────────────────────────────────
+  const detailsPanel = document.createElement('div')
+  detailsPanel.className = 'overflow-hidden scrollbar-none'
+  detailsPanel.style.flex = '1 1 70%'
+  detailsPanel.style.minWidth = '0'
+  detailsPanel.style.minHeight = '0'
+  detailsPanel.style.backgroundColor = '#0f172a'
+  detailsPanel.style.scrollbarWidth = 'none'
 
-  // ─── Thin vertical accent with glow ───────────────────────────────
-  const accent = document.createElement('div')
-  accent.style.width = '3px'
-  accent.style.flexShrink = '0'
-  accent.style.background = '#38bdf8'
-  accent.style.boxShadow = '0 0 24px rgba(56, 189, 248, 0.7), 0 0 48px rgba(56, 189, 248, 0.35)'
-  wrap.appendChild(accent)
-
-  // ─── Right sidebar (35%) ──────────────────────────────────────────
-  // Static TV sidebar: the inner content scales down to fit instead of
-  // relying on scroll affordances.
-  const right = document.createElement('div')
-  right.className = 'overflow-hidden scrollbar-none'
-  right.style.flex = '1 1 0%'
-  right.style.minWidth = '0'
-  right.style.minHeight = '0'
-  right.style.position = 'relative'
-  right.style.backgroundColor = '#0f172a'
-
-  const rightContent = document.createElement('div')
-  rightContent.style.display = 'flex'
-  rightContent.style.flexDirection = 'column'
-  rightContent.style.width = '100%'
-  rightContent.style.minHeight = '100%'
-  rightContent.style.padding = '48px 36px'
-  let rightFit: FitToViewportController | null = null
+  const detailsContent = document.createElement('div')
+  detailsContent.style.display = 'flex'
+  detailsContent.style.flexDirection = 'column'
+  detailsContent.style.width = '100%'
+  detailsContent.style.minHeight = '100%'
+  detailsContent.style.padding = '48px 56px'
+  let stopDetailsScroll: (() => void) | null = null
 
   // 1. Top badge — COMING UP · IN N DAYS / HAPPENING TODAY 🎉
   const badge = document.createElement('div')
@@ -292,7 +341,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   } else {
     badge.textContent = `COMING UP · IN ${ev.daysUntil} DAYS`
   }
-  rightContent.appendChild(badge)
+  detailsContent.appendChild(badge)
 
   // 2. Event name — Bebas Neue, giant
   const name = document.createElement('div')
@@ -304,7 +353,7 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
   name.style.marginBottom = '32px'
   name.style.wordBreak = 'break-word'
   name.textContent = ev.name
-  rightContent.appendChild(name)
+  detailsContent.appendChild(name)
 
   // 3. Details block — icons + data, skip empty fields
   const details = document.createElement('div')
@@ -333,10 +382,10 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     locLine.textContent = `📍  ${ev.location}`
     details.appendChild(locLine)
   }
-  rightContent.appendChild(details)
+  detailsContent.appendChild(details)
 
-  // 4. About block (if notes set). v1.1.3 originally allowed scrolling here.
-  // The TV view now scales the sidebar content as one static composition.
+  // 4. About block (if notes set). The details panel auto-scrolls only when
+  // this full content stack overflows the TV viewport.
   if (ev.notes) {
     const aboutWrap = document.createElement('div')
     aboutWrap.style.marginTop = '28px'
@@ -363,14 +412,14 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
     notesText.textContent = ev.notes
     aboutWrap.appendChild(notesText)
 
-    rightContent.appendChild(aboutWrap)
+    detailsContent.appendChild(aboutWrap)
   }
 
   // 5. Spacer pushes QR to the bottom
   const spacer = document.createElement('div')
   spacer.style.flex = '1'
   spacer.style.minHeight = '24px'
-  rightContent.appendChild(spacer)
+  detailsContent.appendChild(spacer)
 
   // 6. QR block (bottom)
   if (ev.event_url) {
@@ -402,14 +451,25 @@ function renderEventLayout(ev: CelebEventComputed, timezone: string): HTMLElemen
 
     void renderQRCanvas(ev.event_url).then((c) => {
       qrBlock.appendChild(c)
-      rightFit?.fit()
+      stopDetailsScroll?.()
+      stopDetailsScroll = startLoopingAutoScroll(detailsPanel)
     })
 
-    rightContent.appendChild(qrBlock)
+    detailsContent.appendChild(qrBlock)
   }
 
-  right.appendChild(rightContent)
-  rightFit = fitToViewport(right, rightContent, { mode: 'transform', minScale: 0.68 })
-  wrap.appendChild(right)
+  detailsPanel.appendChild(detailsContent)
+  stopDetailsScroll = startLoopingAutoScroll(detailsPanel)
+  wrap.appendChild(detailsPanel)
+
+  // ─── Thin vertical accent with glow ───────────────────────────────
+  const accent = document.createElement('div')
+  accent.style.width = '3px'
+  accent.style.flexShrink = '0'
+  accent.style.background = '#38bdf8'
+  accent.style.boxShadow = '0 0 24px rgba(56, 189, 248, 0.7), 0 0 48px rgba(56, 189, 248, 0.35)'
+  wrap.appendChild(accent)
+
+  wrap.appendChild(visual)
   return wrap
 }
