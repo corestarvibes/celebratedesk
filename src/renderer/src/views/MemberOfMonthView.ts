@@ -11,7 +11,7 @@ import { openSettings } from '../modals/SettingsModal'
 import { fileUrl } from '../utils/fileUrl'
 import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
-import { fitToViewport } from '../utils/fitToViewport'
+import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
 const QA_PER_SLIDE = 8 // 2 columns × 4 rows per slide
 
@@ -20,6 +20,7 @@ const QA_PER_SLIDE = 8 // 2 columns × 4 rows per slide
 let currentRoot: HTMLElement | null = null
 let currentMember: MotmMember | null = null
 let slideIndex = 0
+let currentQaFit: FitToViewportController | null = null
 // Tracks the last slide index we actually PAINTED so we can fire the star
 // burst exactly once per entry to the hero (slide 0), not on every re-render
 // of slide 0 (e.g. when an unrelated state change causes us to remount).
@@ -220,6 +221,8 @@ function renderEmptyOrPicker(root: HTMLElement, members: MotmMember[]): void {
 function renderSlide(root: HTMLElement, member: MotmMember, idx: number): void {
   const total = totalSlideCount(member)
   const safeIdx = Math.max(0, Math.min(idx, total - 1))
+  currentQaFit?.destroy()
+  currentQaFit = null
   root.replaceChildren()
   // eslint-disable-next-line no-console
   console.log(
@@ -244,6 +247,8 @@ function renderSlide(root: HTMLElement, member: MotmMember, idx: number): void {
   const pairIdx = (safeIdx - 1) * QA_PER_SLIDE
   const group = member.qa.slice(pairIdx, pairIdx + QA_PER_SLIDE)
   root.appendChild(renderQAGroup(member, group, safeIdx, qaSlideCount(member)))
+  requestAnimationFrame(() => currentQaFit?.fit())
+  window.setTimeout(() => currentQaFit?.fit(), 120)
   lastPaintedIndex = safeIdx
 }
 
@@ -495,7 +500,7 @@ function renderQAGroup(
   scroller.appendChild(content)
   wrap.appendChild(scroller)
   let fallbackScrollStarted = false
-  fitToViewport(scroller, content, {
+  currentQaFit = fitToViewport(scroller, content, {
     mode: 'css-var',
     minScale: 0.72,
     onScale: (_scale, hitFloor) => {
