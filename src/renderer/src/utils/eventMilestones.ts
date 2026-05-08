@@ -7,6 +7,10 @@ function milestoneValue(ev: CelebEventComputed, occurrenceDate: string): number 
   return null
 }
 
+function yearLabel(value: number): string {
+  return `${value} year${value === 1 ? '' : 's'}`
+}
+
 export function milestoneShortLabel(
   ev: CelebEventComputed,
   occurrenceDate: string
@@ -24,6 +28,6 @@ export function milestoneVerboseLabel(
 ): string {
   const value = milestoneValue(ev, occurrenceDate)
   if (value === null) return ''
-  if (ev.type === 'anniversary') return `${value} years`
+  if (ev.type === 'anniversary') return yearLabel(value)
   return occurrenceDate < todayInTz(timezone) ? `turned ${value}` : `turning ${value}`
 }
