@@ -5,7 +5,7 @@ import type { ViewContext } from './viewRegistry'
 const QR_PX = 380
 const DROP_IN_QR = {
   id: 'qr-drop-in',
-  icon: '🥊',
+  icon: '💪',
   label: 'Drop-In',
   url: 'https://app.chalkitpro.com/dropIns/626/3886/x',
   includeInSlideshow: true,
@@ -13,6 +13,10 @@ const DROP_IN_QR = {
 }
 
 type QRCardEntry = QRCodeEntry & { description?: string }
+
+function isBottomRowQr(entry: QRCardEntry): boolean {
+  return entry.id === 'qr-free-trial' || entry.id === DROP_IN_QR.id
+}
 
 async function renderQRCanvas(url: string): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas')
@@ -59,23 +63,38 @@ export function qrCodesView(_ctx: ViewContext): HTMLElement {
   header.textContent = 'Scan to connect'
   root.appendChild(header)
 
-  const grid = document.createElement('div')
-  // Single row of 4 cards across the whole screen — better for a 50" TV
-  // viewed from across the room than a 2×2 with half-sized codes.
-  grid.style.display = 'grid'
-  grid.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))'
-  grid.style.gap = '20px'
-  grid.style.flex = '1 1 0%'
-  grid.style.minHeight = '0'
-  grid.style.width = '100%'
-  grid.style.alignItems = 'stretch'
-  root.appendChild(grid)
+  const rows = document.createElement('div')
+  rows.style.display = 'flex'
+  rows.style.flexDirection = 'column'
+  rows.style.gap = '20px'
+  rows.style.flex = '1 1 0%'
+  rows.style.minHeight = '0'
+  rows.style.width = '100%'
+  rows.style.justifyContent = 'center'
+  root.appendChild(rows)
+
+  const topRow = document.createElement('div')
+  topRow.style.display = 'flex'
+  topRow.style.justifyContent = 'center'
+  topRow.style.gap = '20px'
+  topRow.style.minHeight = '0'
+
+  const bottomRow = document.createElement('div')
+  bottomRow.style.display = 'flex'
+  bottomRow.style.justifyContent = 'center'
+  bottomRow.style.gap = '20px'
+  bottomRow.style.minHeight = '0'
+
+  rows.appendChild(topRow)
+  rows.appendChild(bottomRow)
 
   void window.celebAPI.settings.get('qrCodes').then(async (raw) => {
     const codes = Array.isArray(raw) ? (raw as QRCodeEntry[]) : []
     const entries: QRCardEntry[] = [...codes, DROP_IN_QR]
     for (const entry of entries) {
-      grid.appendChild(await renderCard(entry))
+      const card = await renderCard(entry)
+      if (isBottomRowQr(entry)) bottomRow.appendChild(card)
+      else topRow.appendChild(card)
     }
   })
 
@@ -97,6 +116,8 @@ async function renderCard(entry: QRCardEntry): Promise<HTMLElement> {
   card.style.textAlign = 'center'
   card.style.minHeight = '0'
   card.style.minWidth = '0'
+  card.style.width = 'calc((100% - 40px) / 3)'
+  card.style.maxWidth = '560px'
   card.style.overflow = 'hidden'
 
   // 1. Emoji
