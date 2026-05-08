@@ -13,7 +13,7 @@ import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
 import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
-const QA_PER_SLIDE = 4 // 2 columns × 2 rows per slide for TV readability
+const QA_PER_SLIDE = 6 // optimistic cap; fit/scroll fallback handles long answers
 
 // Module-level state — survives across re-renders so the main slideshow can
 // advance our slide without remounting us.
