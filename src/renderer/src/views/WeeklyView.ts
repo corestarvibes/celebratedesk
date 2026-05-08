@@ -1,8 +1,15 @@
 import { addDays, parseISO } from 'date-fns'
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz'
+import type { CelebEventComputed } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
-import { todayInTz } from '@utils/dateHelpers'
+import { handleFeb29, todayInTz } from '@utils/dateHelpers'
 import { eventCardTight } from '../components/EventCard'
+
+function occursOnCalendarDay(ev: CelebEventComputed, key: string): boolean {
+  if (!ev.recurring) return ev.date === key
+  const year = Number(key.slice(0, 4))
+  return handleFeb29(ev.date, year) === key
+}
 
 export function weeklyView(ctx: ViewContext): HTMLElement {
   const { events, timezone } = ctx
@@ -42,7 +49,7 @@ export function weeklyView(ctx: ViewContext): HTMLElement {
     head.appendChild(dayNum)
     col.appendChild(head)
 
-    const dayEvents = events.filter((e) => e.nextOccurrence === key)
+    const dayEvents = events.filter((e) => occursOnCalendarDay(e, key))
     if (dayEvents.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'text-xs opacity-40 px-1'
