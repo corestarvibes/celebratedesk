@@ -13,7 +13,7 @@ import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
 import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
-const QA_PER_SLIDE = 8 // 2 columns × 4 rows per slide
+const QA_PER_SLIDE = 4 // 2 columns × 2 rows per slide for TV readability
 
 // Module-level state — survives across re-renders so the main slideshow can
 // advance our slide without remounting us.
@@ -437,9 +437,8 @@ function renderQAGroup(
   scroller.style.scrollbarWidth = 'none'
 
   const content = document.createElement('div')
-  // Two-column grid. Up to 8 pairs per slide → 4 per column. Large type sizes
-  // below may cause the slide to overflow on smaller viewports; the one-way
-  // auto-scroller kicks in to cycle through.
+  // Two-column grid. Keep each slide intentionally sparse so long answers
+  // remain readable on the TV; fit + scroll are only safety nets.
   content.className = 'grid'
   content.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
   content.style.gap =
@@ -461,8 +460,8 @@ function renderQAGroup(
     // detects this, or the Swap Q↔A buttons in Settings.
     // Both Q — and A — labels use the brand blue. Hardcoded so a custom
     // accentColor in settings can't re-tint them to an off-brand color.
-    // Sized for 50–55" TV legibility. Will likely overflow a single slide
-    // when there are 4 pairs per column — the one-way auto-scroll handles it.
+    // Sized for 50–55" TV legibility. The one-way auto-scroll is a fallback
+    // for unusually long answers after fit reaches its floor.
     const qLabel = document.createElement('div')
     qLabel.className = 'font-bold uppercase tracking-[0.3em]'
     qLabel.style.color = '#38bdf8'
