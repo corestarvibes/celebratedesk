@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 import type { QRCodeEntry } from '@shared/types'
 import type { ViewContext } from './viewRegistry'
 
-const QR_PX = 380
+const QR_PX = 220
 const DROP_IN_QR = {
   id: 'qr-drop-in',
   icon: '💪',
@@ -42,7 +42,7 @@ async function renderQRCanvas(url: string): Promise<HTMLCanvasElement> {
     }
     console.error('[qr] generate failed', err)
   }
-  // Fixed display size — 200px × 200px regardless of canvas bitmap resolution.
+  // Fixed display size regardless of canvas bitmap resolution.
   canvas.style.width = `${QR_PX}px`
   canvas.style.height = `${QR_PX}px`
   canvas.style.flexShrink = '0'
