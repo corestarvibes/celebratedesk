@@ -1,0 +1,28 @@
+96c297b Update package lock
+de21726 Show fewer MOTM Q&A pairs per slide
+48089b4 Reduce QR card canvas size
+a1e5c4b Center QR codes in two rows
+e96e9f7 Add drop-in QR card
+6d4c1eb Restore MOTM Q&A slide cap
+5eb50da Tune MOTM Q&A slide cap
+222291b Reduce MOTM Q&A pairs per slide
+6d67cb4 Pluralize milestone year labels
+7b35ae0 Refit MOTM Q&A on slide changes
+1f48fb5 Correct displayed milestone ages
+6948a44 Rebalance events view with auto-scroll
+5890895 Show past weekly events
+39fe5f1 Log MOTM fit fallback path
+11f22fd Correct fit helper scale search
+912926b Show past monthly calendar events
+fe623ab Fit attendance columns to viewport
+540fd2f Fit event sidebar to viewport
+0cc78f0 Fit member Q&A slides to viewport
+8ac13d9 Fit today celebration view to viewport
+87dbe8c Add fit-to-viewport helper
+ba1dd3d fix: lazy-load sharp and add path fallback for cross-platform sync
+a88a242 fix(sync): replace em-dashes with -- in watch.ps1
+bdc6418 chore: bump to 1.1.5
+63f24ae feat(month): show years count + age suffix on calendar pills
+b70142c feat(mac): add fix-install.command for one-click Gatekeeper bypass
+628bfca chore: bump to 1.1.4
+1492dc7 fix(mac): disable hardenedRuntime to produce consistent ad-hoc signature
