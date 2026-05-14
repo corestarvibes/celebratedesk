@@ -13,7 +13,7 @@ import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
 import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
-const QA_PER_SLIDE = 4 // 2 columns × 2 rows per slide for TV readability
+const QA_PER_SLIDE = 2 // 2 columns × 1 row; long answers need the full slide height
 
 // Module-level state — survives across re-renders so the main slideshow can
 // advance our slide without remounting us.
@@ -437,8 +437,8 @@ function renderQAGroup(
   scroller.style.scrollbarWidth = 'none'
 
   const content = document.createElement('div')
-  // Two-column grid. Keep each slide intentionally sparse so long answers
-  // remain readable on the TV; fit + scroll are only safety nets.
+  // Two-column grid with a single row. A two-row grid lets a long answer in
+  // the top row push the lower row off-screen, so pagination owns spacing.
   content.className = 'grid'
   content.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
   content.style.gap =
