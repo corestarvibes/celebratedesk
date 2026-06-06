@@ -281,6 +281,61 @@ export function bulkUpsert(events: Partial<CelebEvent>[]): { inserted: number; u
   return { inserted, updated }
 }
 
+/**
+ * Replace-roster import. Wipes every CSV-sourced event, then inserts the
+ * supplied rows fresh — all in one transaction, so a failure rolls the whole
+ * thing back. Manual and scraped events are left untouched.
+ *
+ * This is what the "Replace roster" import option calls. Because it deletes
+ * first, members who left the gym (and are no longer in the export) drop off
+ * the wall, and any stale duplicates from past imports are cleared, in a single
+ * pass. The regular `bulkUpsert` only ever adds/updates and never removes.
+ *
+ * Returns: removed = old csv rows deleted, inserted = new rows added. `updated`
+ * is always 0 (every kept row is a fresh insert) and is included only so the
+ * shape matches the other bulk operations.
+ */
+export function replaceCsvEvents(
+  events: Partial<CelebEvent>[]
+): { inserted: number; updated: number; removed: number } {
+  const d = requireDb()
+  const now = new Date().toISOString()
+  let inserted = 0
+  let removed = 0
+  const insertStmt = d.prepare(
+    `INSERT INTO events (id,name,type,date,recurring,notes,photo_url,source,lastScraped,end_date,location,event_url,times,qr_label,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  )
+  const txn = d.transaction((list: Partial<CelebEvent>[]) => {
+    removed = (
+      d.prepare("SELECT COUNT(*) AS n FROM events WHERE source = 'csv'").get() as { n: number }
+    ).n
+    d.prepare("DELETE FROM events WHERE source = 'csv'").run()
+    for (const ev of list) {
+      insertStmt.run(
+        uuidv4(),
+        ev.name ?? '',
+        ev.type ?? 'custom',
+        ev.date ?? now.slice(0, 10),
+        (ev.recurring ?? true) ? 1 : 0,
+        ev.notes ?? null,
+        ev.photo_url ?? null,
+        'csv',
+        null,
+        ev.end_date ?? null,
+        ev.location ?? null,
+        ev.event_url ?? null,
+        ev.times ?? null,
+        ev.qr_label ?? null,
+        now,
+        now
+      )
+      inserted += 1
+    }
+  })
+  txn(events)
+  return { inserted, updated: 0, removed }
+}
+
 export function searchEvents(query: string): CelebEvent[] {
   const q = `%${query.toLowerCase()}%`
   const rows = requireDb()

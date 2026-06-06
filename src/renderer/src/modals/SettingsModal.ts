@@ -247,6 +247,8 @@ function dataSection(settings: AppSettings): HTMLElement {
   // everything from "today onward, plus the rest of this month" is imported.
   // The import button reads this field and passes it to the IPC, which only
   // accepts events whose next occurrence is on-or-after this date.
+  // NOTE: ignored when "Replace roster" is checked — a replace imports the
+  // whole file as the new source of truth.
   const now = new Date()
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const fromMonthWrap = document.createElement('label')
@@ -264,16 +266,37 @@ function dataSection(settings: AppSettings): HTMLElement {
   fromMonthWrap.appendChild(fromMonthInput)
   body.appendChild(fromMonthWrap)
 
+  // Replace-roster toggle. OFF (default) = merge: add new people, update
+  // existing ones, never delete — so members who left the gym linger forever.
+  // ON = replace: wipe the existing imported roster and rebuild from this file,
+  // so departed members drop off and stale duplicates clear in one pass. Manual
+  // events (added by hand, not from a CSV) are always preserved either way.
+  let replaceRoster = false
+  const replaceWrap = labeledCheckbox(
+    'Replace roster (remove members no longer in this file)',
+    false,
+    (v) => {
+      replaceRoster = v
+    }
+  )
+  body.appendChild(replaceWrap)
+
   // Shared handler — used by both the drop zone and the explicit button.
   const importEventsCsv = async (path: string): Promise<void> => {
     try {
       const txt = await window.celebAPI.system.readTextFile(path)
       const monthValue = fromMonthInput.value.trim()
       const fromDate = /^\d{4}-\d{2}$/.test(monthValue) ? `${monthValue}-01` : undefined
-      const res = await window.celebAPI.db.importCSV(txt, { fromDate })
+      const res = await window.celebAPI.db.importCSV(txt, { fromDate, replace: replaceRoster })
       const errs = res.errors?.length ?? 0
       if (errs > 0) {
         showImportErrors(res)
+      } else if (replaceRoster) {
+        toast(
+          `Roster replaced — ${res.inserted} events imported, departed members cleared`,
+          'success',
+          6000
+        )
       } else {
         const skippedMsg = res.skipped
           ? ` · skipped ${res.skipped} events before ${monthValue}`

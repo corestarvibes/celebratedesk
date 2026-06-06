@@ -41,6 +41,7 @@ import {
   getEventById,
   initDb,
   reorderCoaches,
+  replaceCsvEvents,
   searchEvents,
   setActiveMotm,
   upsertCoach,
@@ -196,7 +197,7 @@ function registerIpc(): void {
     (
       _e,
       csv: string,
-      options?: { fromDate?: string }
+      options?: { fromDate?: string; replace?: boolean }
     ): ImportResult => {
       const parsed = parseCsv(csv)
       if (parsed.rows.length === 0) {
@@ -209,32 +210,48 @@ function registerIpc(): void {
         }
       }
 
-      // Optional rolling-window filter: keep only rows whose NEXT occurrence
-      // is on-or-after the supplied YYYY-MM-DD. Events without a next
-      // occurrence (non-recurring, past) are filtered based on their raw date.
-      let rowsToImport = parsed.rows
+      const mapped = parsed.rows.map((r) => ({
+        name: r.name,
+        type: r.type,
+        date: r.date,
+        recurring: r.recurring,
+        notes: r.notes,
+        photo_url: r.photo_url,
+        source: 'csv' as const
+      }))
+
+      // Replace-roster import: wipe all CSV-sourced events and rebuild from
+      // this file. Members no longer in the export drop off, and stale
+      // duplicates clear. Manual/scraped events are preserved. The
+      // rolling-window date filter is intentionally NOT applied here — a
+      // roster replace imports the whole file as the new source of truth.
+      if (options?.replace) {
+        const res = replaceCsvEvents(mapped)
+        return {
+          inserted: res.inserted,
+          updated: res.updated,
+          skipped: 0,
+          errors: parsed.errors,
+          detectedHeaders: parsed.detectedHeaders
+        }
+      }
+
+      // Merge import (default). Optional rolling-window filter: keep only rows
+      // whose NEXT occurrence is on-or-after the supplied YYYY-MM-DD. Events
+      // without a next occurrence (non-recurring, past) are filtered on raw date.
+      let rowsToImport = mapped
       let skippedByFilter = 0
       if (options?.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(options.fromDate)) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
         const from = options.fromDate
-        rowsToImport = parsed.rows.filter((r) => {
+        rowsToImport = mapped.filter((r) => {
           const nextOcc = getNextOccurrence(r.date, r.recurring, tz)
           return nextOcc >= from
         })
-        skippedByFilter = parsed.rows.length - rowsToImport.length
+        skippedByFilter = mapped.length - rowsToImport.length
       }
 
-      const res = bulkUpsert(
-        rowsToImport.map((r) => ({
-          name: r.name,
-          type: r.type,
-          date: r.date,
-          recurring: r.recurring,
-          notes: r.notes,
-          photo_url: r.photo_url,
-          source: 'csv'
-        }))
-      )
+      const res = bulkUpsert(rowsToImport)
       return {
         ...res,
         skipped: skippedByFilter,

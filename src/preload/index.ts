@@ -37,7 +37,7 @@ const celebAPI = {
     exportJSON: (): Promise<string> => ipcRenderer.invoke('db:exportJSON'),
     importCSV: (
       csv: string,
-      options?: { fromDate?: string }
+      options?: { fromDate?: string; replace?: boolean }
     ): Promise<ImportResult> => ipcRenderer.invoke('db:importCSV', csv, options)
   },
   scraper: {
