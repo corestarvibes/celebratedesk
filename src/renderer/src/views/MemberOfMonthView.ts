@@ -13,7 +13,10 @@ import { currentMonthInTz } from '@utils/coachRotation'
 import { toast } from '../components/Toast'
 import { fitToViewport, type FitToViewportController } from '../utils/fitToViewport'
 
-const QA_PER_SLIDE = 2 // 2 columns × 1 row; long answers need the full slide height
+// 2 columns x 1 row. Long answers need the full slide height, and the
+// fit-to-viewport floor-scroll fallback is still unreliable for overflow.
+// Do not raise this until that fallback is diagnosed and fixed.
+const QA_PER_SLIDE = 2
 
 // Module-level state — survives across re-renders so the main slideshow can
 // advance our slide without remounting us.
