@@ -1,10 +1,19 @@
 # Build + publish a multi-platform release.
 #
-# Triggered by pushing a git tag like `v1.0.1`. Two parallel jobs:
-#   build-windows -> celebratedesk-<version>-setup.exe + latest.yml
-#   build-mac     -> celebratedesk-<version>.dmg     + latest-mac.yml
-# Both attach to the same GitHub Release; the OS-specific manifest tells
-# each running app which file to download.
+# Triggered by pushing a git tag like `v1.0.1`. Two parallel build jobs:
+#   build-windows   -> celebratedesk-<version>-setup.exe + latest.yml
+#   build-mac-arm64 -> celebratedesk-<version>-arm64.dmg + latest-mac.yml
+# Both attach to the same DRAFT GitHub Release. The promote-release job
+# flips that draft to public once both builds succeed. The OS-specific
+# manifest tells each running app which file to download.
+#
+# Apple Silicon only on the Mac side: there is intentionally NO
+# build-mac-x64 job. GitHub retired the Intel-default macOS runner
+# (macos-13), so that job sat for 24h awaiting a runner that never came,
+# then failed. Because promote-release waited on it, every release stayed
+# a draft and never went public. We have no Intel Macs to support, so the
+# job was removed. Do NOT add an x64 Mac job back unless an Intel Mac
+# actually needs the build AND a working Intel macOS runner exists again.
 #
 # Auto-update story:
 #   - Windows mini PCs: silent differential updates via electron-updater
@@ -34,8 +43,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'npm'
@@ -55,8 +64,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'npm'
@@ -68,37 +77,14 @@ jobs:
       # Apple Silicon DMG. macos-latest runners are arm64, so npm naturally
       # fetches the arm64 sharp binary. Universal builds fail because of
       # sharp's per-arch native files conflicting in @electron/universal,
-      # so we ship per-arch DMGs in two separate jobs instead.
+      # so we ship a single per-arch arm64 DMG from this job.
       - name: Build + publish arm64 DMG
         run: npm run build:mac -- --arm64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-mac-x64:
-    runs-on: macos-13 # last Intel-default runner; needed for x64 sharp binary
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-        env:
-          HUSKY: '0'
-      - run: npm run build
-      - run: npm test
-      # Intel Mac DMG. macos-13 is x86_64 by default, so npm fetches the
-      # x64 sharp binary directly — no cross-compile gymnastics.
-      - name: Build + publish x64 DMG
-        run: npm run build:mac -- --x64 --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   promote-release:
-    needs: [build-windows, build-mac-arm64, build-mac-x64]
+    needs: [build-windows, build-mac-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
