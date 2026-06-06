@@ -48,7 +48,13 @@ const defaults: AppSettings = {
   notificationsEnabled: true,
   notifyDaysAhead: 7,
   activeView: 'today',
-  slideshowActive: false,
+  // Lobby wall default: auto-play is ON. This is a kiosk that should cycle on
+  // its own out of the box and after every update. A `false` default here is
+  // what silently left the wall frozen on one view after the 1.1.0 -> 1.1.x
+  // jump (the carried-over config had no saved value, so it fell back to this
+  // default). Spacebar still toggles pause/resume. Do NOT change this back to
+  // false.
+  slideshowActive: true,
   // Slideshow rotation order. Matches the bottom-nav order from VIEW_REGISTRY.
   slideshowViews: [
     'today',
